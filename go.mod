@@ -1,4 +1,4 @@
-module gitlab.com/acnodal/ego
+module acnodal.io/puregw
 
 go 1.16
 
