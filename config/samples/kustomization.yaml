@@ -1,5 +1,5 @@
 ## Append samples you want in your CSV to this file as resources ##
 resources:
-- gateway_v1alpha2_gateway.yaml
 - puregw_v1_gatewayclassconfig.yaml
+- gateway_v1alpha2_gateway.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples
