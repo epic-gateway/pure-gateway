@@ -6,5 +6,10 @@ plugins:
   manifests.sdk.operatorframework.io/v2: {}
   scorecard.sdk.operatorframework.io/v2: {}
 projectName: puregw
-repo: gitlab.com/acnodal/ego
+
+# This is a lie, but for some reason kubebuilder uses this field as
+# the module, instead of the "module" field in go.mod, so if we want
+# our generated stuff to have the correct module we need to do this.
+repo: acnodal.io/puregw
+
 version: "3"
