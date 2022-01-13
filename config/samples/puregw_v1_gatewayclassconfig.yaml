@@ -1,0 +1,12 @@
+---
+apiVersion: puregw.acnodal.io/v1
+kind: GatewayClassConfig
+metadata:
+  name: sample
+spec:
+  epic:
+    gateway-hostname: epic-ctl
+    service-account: user1
+    service-key: password1
+    user-namespace: root
+    gateway-template: gatewayhttp

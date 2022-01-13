@@ -1,0 +1,24 @@
+# permissions for end users to edit gatewayclassconfigs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: gatewayclassconfig-editor-role
+rules:
+- apiGroups:
+  - puregw.acnodal.io
+  resources:
+  - gatewayclassconfigs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - puregw.acnodal.io
+  resources:
+  - gatewayclassconfigs/status
+  verbs:
+  - get

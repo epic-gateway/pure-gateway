@@ -12,4 +12,12 @@ projectName: puregw
 # our generated stuff to have the correct module we need to do this.
 repo: acnodal.io/puregw
 
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: acnodal.io
+  group: puregw
+  kind: GatewayClassConfig
+  path: acnodal.io/puregw/apis/puregw/v1
+  version: v1
 version: "3"
