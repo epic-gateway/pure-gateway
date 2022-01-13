@@ -1,0 +1,22 @@
+---
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: Gateway
+metadata:
+  name: sample
+spec:
+  gatewayClassName: sample
+  listeners:
+  - protocol: HTTP
+    port: 80
+    name: sample-web-gw
+---
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: Gateway
+metadata:
+  name: notpuregw-sample
+spec:
+  gatewayClassName: not-puregw
+  listeners:
+  - protocol: HTTP
+    port: 80
+    name: sample-web-gw

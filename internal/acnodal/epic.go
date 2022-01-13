@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -29,7 +30,7 @@ const (
 type EPIC interface {
 	GetAccount() (AccountResponse, error)
 	GetGroup() (GroupResponse, error)
-	AnnounceGateway(url string, name string, ports []gatewayv1a2.Listener) (ServiceResponse, error)
+	AnnounceGateway(url string, name string, cluster string, ports []gatewayv1a2.Listener) (ServiceResponse, error)
 	FetchGateway(url string) (ServiceResponse, error)
 	Delete(svcUrl string) error
 }
@@ -82,6 +83,9 @@ type ServiceSpec struct {
 	Ports       []v1.ServicePort `json:"public-ports"`
 	ServiceID   uint16           `json:"service-id"`
 	TrueIngress bool             `json:"true-ingress"`
+
+	// UpstreamClusters are the set of clients that use this Service.
+	UpstreamClusters []string `json:"upstream-clusters"`
 
 	// Endpoints are the objects that EPIC uses to trigger external-dns
 	// to write DNS records. We also get the EPIC-assigned hostname from
@@ -233,18 +237,11 @@ func (n *epic) GetGroup() (GroupResponse, error) {
 // creation URL which is a child of the service group to which this
 // service will belong. name is the service name.  address is a string
 // containing an IP address. ports is a slice of v1.ServicePorts.
-func (n *epic) AnnounceGateway(url string, name string, sPorts []gatewayv1a2.Listener) (ServiceResponse, error) {
-	// Translate from the Gateway's Listener struct to k8s/EPIC's
-	// ServicePort
-	ports, err := ListenersToPorts(sPorts)
-	if err != nil {
-		return ServiceResponse{}, err
-	}
-
+func (n *epic) AnnounceGateway(url string, name string, cluster string, sPorts []gatewayv1a2.Listener) (ServiceResponse, error) {
 	// send the request
 	response, err := n.http.R().
 		SetBody(ServiceCreate{
-			Service: Service{ObjectMeta: ObjectMeta{Name: name}, Spec: ServiceSpec{TrueIngress: true, DisplayName: name, Ports: ports}}}).
+			Service: Service{ObjectMeta: ObjectMeta{Name: name}, Spec: ServiceSpec{TrueIngress: true, DisplayName: name, UpstreamClusters: []string{cluster}, Ports: ListenersToPorts(sPorts)}}}).
 		SetResult(ServiceResponse{}).
 		Post(url)
 	if err != nil {
@@ -300,6 +297,27 @@ func (n *epic) Delete(url string) error {
 	return nil
 }
 
-func ListenersToPorts(listeners []gatewayv1a2.Listener) ([]v1.ServicePort, error) {
-	return []v1.ServicePort{}, nil
+func ListenersToPorts(listeners []gatewayv1a2.Listener) []v1.ServicePort {
+	cPorts := make([]v1.ServicePort, len(listeners))
+
+	// Expose the configured ports
+	for i, listener := range listeners {
+		proto := washProtocol(listener.Protocol)
+		cPorts[i] = v1.ServicePort{
+			Name:     string(listener.Name),
+			Port:     int32(listener.Port),
+			Protocol: proto,
+		}
+	}
+
+	return cPorts
+}
+
+// washProtocol "washes" proto, optionally upcasing if necessary.
+func washProtocol(proto gatewayv1a2.ProtocolType) v1.Protocol {
+	upper := strings.ToUpper(string(proto))
+	if upper == "HTTP" {
+		upper = "TCP"
+	}
+	return v1.Protocol(upper)
 }

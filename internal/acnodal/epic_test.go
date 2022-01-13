@@ -82,7 +82,7 @@ func TestAnnouncements(t *testing.T) {
 	g := GetGroup(t, e, GroupURL)
 
 	// announce a service
-	svc, err := e.AnnounceGateway(g.Links["create-service"], ServiceName, []gatewayv1a2.Listener{Listener80})
+	svc, err := e.AnnounceGateway(g.Links["create-service"], ServiceName, "test-cluster", []gatewayv1a2.Listener{Listener80})
 	if err != nil {
 		t.Fatal("announcing service", err)
 	}
