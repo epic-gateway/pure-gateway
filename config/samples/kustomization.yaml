@@ -3,4 +3,5 @@ resources:
 - puregw_v1_gatewayclassconfig.yaml
 - gateway_v1alpha2_gateway.yaml
 - discovery_v1_endpointslice.yaml
+- gateway_v1alpha2_httproute.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

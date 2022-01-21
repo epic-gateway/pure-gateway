@@ -31,4 +31,9 @@ resources:
   group: discovery
   kind: EndpointSlice
   version: v1
+- controller: true
+  domain: networking.k8s.io
+  group: gateway
+  kind: HTTPRoute
+  version: v1alpha2
 version: "3"
