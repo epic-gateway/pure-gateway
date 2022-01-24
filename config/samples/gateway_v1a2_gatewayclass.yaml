@@ -1,0 +1,19 @@
+---
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: GatewayClass
+metadata:
+  name: sample
+spec:
+  controllerName: acnodal.io/puregw
+  parametersRef:
+    name: sample
+    namespace: default
+    group: puregw.acnodal.io
+    kind: GatewayClassConfig
+---
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: GatewayClass
+metadata:
+  name: not-puregw
+spec:
+  controllerName: example.com/not-puregw
