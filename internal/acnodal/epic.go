@@ -35,6 +35,7 @@ type EPIC interface {
 	FetchGateway(url string) (ServiceResponse, error)
 	Delete(svcUrl string) error
 	AnnounceSlice(url string, slice SliceSpec) (*SliceResponse, error)
+	AnnounceRoute(url string, name string, spec RouteSpec) (*RouteResponse, error)
 }
 
 // epic represents one connection to an Acnodal Enterprise Gateway.
@@ -200,6 +201,29 @@ type SliceResponse struct {
 	Slice   SliceSpec `json:"slice"`
 }
 
+type RouteCreate struct {
+	Route Route `json:"route"`
+}
+
+type Route struct {
+	ObjectMeta ObjectMeta `json:"metadata"`
+	Spec       RouteSpec  `json:"spec"`
+}
+
+// RouteSpec is a container that can hold different kinds of route
+// objects, for example, HTTPRoute.
+type RouteSpec struct {
+	HTTP gatewayv1a2.HTTPRouteSpec `json:"http,omitempty"`
+}
+
+// RouteResponse is the body of the HTTP response to a request to show
+// a Gateway Route.
+type RouteResponse struct {
+	Message string    `json:"message,omitempty"`
+	Links   Links     `json:"link"`
+	Route   RouteSpec `json:"route"`
+}
+
 // New initializes a new EPIC instance. If error is non-nil then the
 // instance shouldn't be used.
 func NewEPIC(config puregwv1.GatewayClassConfigSpec) (EPIC, error) {
@@ -348,6 +372,25 @@ func (n *epic) AnnounceSlice(url string, spec SliceSpec) (*SliceResponse, error)
 		return &SliceResponse{}, fmt.Errorf("response code %d status \"%s\"", response.StatusCode(), response.Status())
 	}
 	return response.Result().(*SliceResponse), nil
+}
+
+func (n *epic) AnnounceRoute(url string, name string, spec RouteSpec) (*RouteResponse, error) {
+	response, err := n.http.R().
+		SetBody(RouteCreate{
+			Route: Route{
+				Spec: spec,
+			},
+		}).
+		SetError(RouteResponse{}).
+		SetResult(RouteResponse{}).
+		Post(url)
+	if err != nil {
+		return &RouteResponse{}, err
+	}
+	if response.IsError() {
+		return &RouteResponse{}, fmt.Errorf("response code %d status \"%s\"", response.StatusCode(), response.Status())
+	}
+	return response.Result().(*RouteResponse), nil
 }
 
 func ListenersToPorts(listeners []gatewayv1a2.Listener) []v1.ServicePort {

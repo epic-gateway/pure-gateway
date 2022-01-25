@@ -153,3 +153,24 @@ func TestSliceAnnouncements(t *testing.T) {
 		t.Errorf("got error %+v", err)
 	}
 }
+
+func TestRouteAnnouncements(t *testing.T) {
+	e := MustEPIC(t)
+	a, err := e.GetAccount()
+	if err != nil {
+		t.Errorf("got error %+v", err)
+	}
+
+	route := RouteSpec{HTTP: gatewayv1a2.HTTPRouteSpec{
+		Hostnames: []gatewayv1a2.Hostname{"test-host", "other-host"},
+	}}
+	rt, err := e.AnnounceRoute(a.Links["create-route"], "test-route", route)
+	if err != nil {
+		t.Errorf("got error %+v", err)
+	}
+
+	// Delete the Route
+	if err := e.Delete(rt.Links["self"]); err != nil {
+		t.Errorf("got error %+v", err)
+	}
+}
