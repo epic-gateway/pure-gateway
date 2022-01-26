@@ -22,6 +22,7 @@ import (
 	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	puregwv1 "acnodal.io/puregw/apis/puregw/v1"
+	discoverycontrollers "acnodal.io/puregw/controllers/discovery"
 	gatewaycontrollers "acnodal.io/puregw/controllers/gateway"
 	//+kubebuilder:scaffold:imports
 )
@@ -73,6 +74,13 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Gateway")
+		os.Exit(1)
+	}
+	if err = (&discoverycontrollers.EndpointSliceReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "EndpointSlice")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

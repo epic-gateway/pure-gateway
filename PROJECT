@@ -26,4 +26,9 @@ resources:
   group: gateway
   kind: Gateway
   version: v1alpha2
+- controller: true
+  domain: discovery.k8s.io
+  group: discovery
+  kind: EndpointSlice
+  version: v1
 version: "3"
