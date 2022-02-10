@@ -8,7 +8,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	v1 "k8s.io/api/core/v1"
+	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 // MockEPIC is a mock of EPIC interface
@@ -65,25 +65,25 @@ func (mr *MockEPICMockRecorder) GetGroup() *gomock.Call {
 }
 
 // AnnounceService mocks base method
-func (m *MockEPIC) AnnounceService(url, name string, ports []v1.ServicePort) (ServiceResponse, error) {
+func (m *MockEPIC) AnnounceGateway(url string, gw gatewayv1a2.Gateway) (GatewayResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AnnounceService", url, name, ports)
-	ret0, _ := ret[0].(ServiceResponse)
+	ret := m.ctrl.Call(m, "AnnounceGateway", url, gw)
+	ret0, _ := ret[0].(GatewayResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AnnounceService indicates an expected call of AnnounceService
-func (mr *MockEPICMockRecorder) AnnounceService(url, name, ports interface{}) *gomock.Call {
+func (mr *MockEPICMockRecorder) AnnounceGateway(url, gw interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AnnounceService", reflect.TypeOf((*MockEPIC)(nil).AnnounceService), url, name, ports)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AnnounceGateway", reflect.TypeOf((*MockEPIC)(nil).AnnounceGateway), url, gw)
 }
 
 // FetchService mocks base method
-func (m *MockEPIC) FetchService(url string) (ServiceResponse, error) {
+func (m *MockEPIC) FetchService(url string) (GatewayResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FetchService", url)
-	ret0, _ := ret[0].(ServiceResponse)
+	ret0, _ := ret[0].(GatewayResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

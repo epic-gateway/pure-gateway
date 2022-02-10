@@ -31,8 +31,8 @@ const (
 type EPIC interface {
 	GetAccount() (AccountResponse, error)
 	GetGroup() (GroupResponse, error)
-	AnnounceGateway(url string, name string, cluster string, ports []gatewayv1a2.Listener) (ServiceResponse, error)
-	FetchGateway(url string) (ServiceResponse, error)
+	AnnounceGateway(url string, gateway gatewayv1a2.Gateway) (GatewayResponse, error)
+	FetchGateway(url string) (GatewayResponse, error)
 	Delete(svcUrl string) error
 	AnnounceSlice(url string, slice SliceSpec) (*SliceResponse, error)
 	AnnounceRoute(url string, name string, spec RouteSpec) (*RouteResponse, error)
@@ -60,6 +60,15 @@ type Account struct {
 	Spec       AccountSpec `json:"spec"`
 }
 
+// ClientRef provides the info needed to refer to a specific object in
+// a specific cluster.
+type ClientRef struct {
+	ClusterID string `json:"clusterID,omitempty"`
+	Namespace string `json:"namespace,omitempty"`
+	Name      string `json:"name,omitempty"`
+	UID       string `json:"uid,omitempty"`
+}
+
 // AccountSpec is the on-the-wire representation of one Account
 // Spec (i.e., the part that defines what the Account should look
 // like).
@@ -77,23 +86,15 @@ type DNSEndpoint struct {
 	DNSName string `json:"dnsName,omitempty"`
 }
 
-// ServiceSpec is the on-the-wire representation of one
-// LoadBalancer Service Spec (i.e., the part that defines what the LB
-// should look like).
-type ServiceSpec struct {
+// GWProxySpec is the on-the-wire representation of one GWProxy Spec.
+type GatewaySpec struct {
+	// ClientRef points back to the client-side object that corresponds
+	// to this one.
+	ClientRef ClientRef `json:"clientRef,omitempty"`
+
 	DisplayName string           `json:"display-name"`
 	Address     string           `json:"public-address,omitempty"`
 	Ports       []v1.ServicePort `json:"public-ports"`
-	ServiceID   uint16           `json:"service-id"`
-	TrueIngress bool             `json:"true-ingress"`
-
-	// UpstreamClusters are the set of clients that use this Service.
-	UpstreamClusters []string `json:"upstream-clusters"`
-
-	// Endpoints are the objects that EPIC uses to trigger external-dns
-	// to write DNS records. We also get the EPIC-assigned hostname from
-	// them.
-	Endpoints []*DNSEndpoint `json:"endpoints,omitempty"`
 
 	// TunnelKey authenticates the client with the EPIC. It must be a
 	// base64-encoded 128-bit value.
@@ -129,15 +130,15 @@ type TunnelEndpoint struct {
 	TunnelID uint32 `json:"tunnel-id"`
 }
 
-type ServiceStatus struct {
+type GatewayStatus struct {
 }
 
-// Service is the on-the-wire representation of one LoadBalancer
-// Service.
-type Service struct {
+// Gateway is the on-the-wire representation of one LoadBalancer
+// Gateway.
+type Gateway struct {
 	ObjectMeta ObjectMeta    `json:"metadata"`
-	Spec       ServiceSpec   `json:"spec"`
-	Status     ServiceStatus `json:"status,omitempty"`
+	Spec       GatewaySpec   `json:"spec"`
+	Status     GatewayStatus `json:"status,omitempty"`
 }
 
 // AccountResponse is the body of the HTTP response to a request to
@@ -155,18 +156,18 @@ type GroupResponse struct {
 	Group   Group  `json:"group"`
 }
 
-// ServiceCreate is the body of the HTTP request to create a load
+// GatewayCreate is the body of the HTTP request to create a load
 // balancer service.
-type ServiceCreate struct {
-	Service Service `json:"service"`
+type GatewayCreate struct {
+	Gateway Gateway `json:"proxy"`
 }
 
-// ServiceResponse is the body of the HTTP response to a request to
+// GatewayResponse is the body of the HTTP response to a request to
 // show a load balancer.
-type ServiceResponse struct {
+type GatewayResponse struct {
 	Message string  `json:"message,omitempty"`
 	Links   Links   `json:"link"`
-	Service Service `json:"service"`
+	Gateway Gateway `json:"proxy"`
 }
 
 type SliceCreate struct {
@@ -213,6 +214,10 @@ type Route struct {
 // RouteSpec is a container that can hold different kinds of route
 // objects, for example, HTTPRoute.
 type RouteSpec struct {
+	// ClientRef points back to the client-side object that corresponds
+	// to this one.
+	ClientRef ClientRef `json:"clientRef,omitempty"`
+
 	HTTP gatewayv1a2.HTTPRouteSpec `json:"http,omitempty"`
 }
 
@@ -295,15 +300,27 @@ func (n *epic) GetGroup() (GroupResponse, error) {
 // creation URL which is a child of the service group to which this
 // service will belong. name is the service name.  address is a string
 // containing an IP address. ports is a slice of v1.ServicePorts.
-func (n *epic) AnnounceGateway(url string, name string, cluster string, sPorts []gatewayv1a2.Listener) (ServiceResponse, error) {
+func (n *epic) AnnounceGateway(url string, gw gatewayv1a2.Gateway) (GatewayResponse, error) {
 	// send the request
 	response, err := n.http.R().
-		SetBody(ServiceCreate{
-			Service: Service{ObjectMeta: ObjectMeta{Name: name}, Spec: ServiceSpec{TrueIngress: true, DisplayName: name, UpstreamClusters: []string{cluster}, Ports: ListenersToPorts(sPorts)}}}).
-		SetResult(ServiceResponse{}).
+		SetBody(GatewayCreate{
+			Gateway: Gateway{
+				Spec: GatewaySpec{
+					ClientRef: ClientRef{
+						ClusterID: "puregw", // FIXME: what's the cluster ID?
+						Namespace: gw.Namespace,
+						Name:      gw.Name,
+						UID:       string(gw.UID),
+					},
+					DisplayName: gw.Name,
+					Ports:       ListenersToPorts(gw.Spec.Listeners),
+				},
+			},
+		}).
+		SetResult(GatewayResponse{}).
 		Post(url)
 	if err != nil {
-		return ServiceResponse{}, err
+		return GatewayResponse{}, err
 	}
 	if response.IsError() {
 		// if the response indicates that this service is already
@@ -320,26 +337,26 @@ func (n *epic) AnnounceGateway(url string, name string, cluster string, sPorts [
 			message = response.Status()
 		}
 
-		return ServiceResponse{}, fmt.Errorf("%s POST response code %d message \"%s\"", url, response.StatusCode(), message)
+		return GatewayResponse{}, fmt.Errorf("%s POST response code %d message \"%s\"", url, response.StatusCode(), message)
 	}
 
-	srv := response.Result().(*ServiceResponse)
+	srv := response.Result().(*GatewayResponse)
 	return *srv, nil
 }
 
 // FetchService fetches the service at "url" from the EPIC.
-func (n *epic) FetchGateway(url string) (ServiceResponse, error) {
+func (n *epic) FetchGateway(url string) (GatewayResponse, error) {
 	response, err := n.http.R().
-		SetResult(ServiceResponse{}).
+		SetResult(GatewayResponse{}).
 		Get(url)
 	if err != nil {
-		return ServiceResponse{}, err
+		return GatewayResponse{}, err
 	}
 	if response.IsError() {
-		return ServiceResponse{}, fmt.Errorf("%s GET response code %d status \"%s\"", url, response.StatusCode(), response.Status())
+		return GatewayResponse{}, fmt.Errorf("%s GET response code %d status \"%s\"", url, response.StatusCode(), response.Status())
 	}
 
-	srv := response.Result().(*ServiceResponse)
+	srv := response.Result().(*GatewayResponse)
 	return *srv, nil
 }
 

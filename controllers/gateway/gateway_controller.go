@@ -6,6 +6,8 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -15,14 +17,21 @@ import (
 	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	puregwv1 "acnodal.io/puregw/apis/puregw/v1"
+	"acnodal.io/puregw/controllers"
 	"acnodal.io/puregw/internal/acnodal"
-	"acnodal.io/puregw/internal/controllers"
 )
 
 // GatewayReconciler reconciles a Gateway object
 type GatewayReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+}
+
+// SetupWithManager sets up the controller with the Manager.
+func (r *GatewayReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&gatewayv1a2.Gateway{}).
+		Complete(r)
 }
 
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=get;list;watch;create;update;patch;delete
@@ -42,47 +51,63 @@ type GatewayReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := log.FromContext(ctx)
+	const (
+		finalizerName = "epic.acnodal.io/controller"
+	)
 
 	// Get the Gateway that caused this request
 	gw := gatewayv1a2.Gateway{}
 	if err := r.Get(ctx, req.NamespacedName, &gw); err != nil {
-		l.Info("can't get Gateway, probably deleted", "name", req.NamespacedName)
-
 		// ignore not-found errors, since they can't be fixed by an
 		// immediate requeue (we'll need to wait for a new notification),
 		// and we can get them on deleted requests.
 		return controllers.Done, client.IgnoreNotFound(err)
 	}
 
-	// Get the owning GatewayClass
-	gc := gatewayv1a2.GatewayClass{}
-	if err := r.Get(ctx, types.NamespacedName{Name: string(gw.Spec.GatewayClassName)}, &gc); err != nil {
-		l.Info("No GatewayClass, will retry", "name", gw.Spec.GatewayClassName)
-		return controllers.TryAgain, nil
+	epic, err := connectToEPIC(ctx, r.Client, string(gw.Spec.GatewayClassName))
+	if err != nil {
+		return controllers.Done, err
 	}
-
-	// Check controller name - are we the right controller?
-	if gc.Spec.ControllerName != "acnodal.io/puregw" {
-		l.Info("Not our ControllerName, will ignore", "request", req)
+	if epic == nil {
+		l.Info("Not our ControllerName, will ignore")
 		return controllers.Done, nil
 	}
 
-	// Get the PureGW GatewayClassConfig referred to by the GatewayClass
-	gwcName := types.NamespacedName{Name: string(gc.Spec.ParametersRef.Name)}
-	if gc.Spec.ParametersRef.Namespace != nil {
-		gwcName.Namespace = string(*gc.Spec.ParametersRef.Namespace)
-	}
-	gwc := puregwv1.GatewayClassConfig{}
-	if err := r.Get(ctx, gwcName, &gwc); err != nil {
-		l.Info("No GatewayClassConfig, will retry", "name", gwcName)
-		return controllers.TryAgain, nil
+	if !gw.ObjectMeta.DeletionTimestamp.IsZero() {
+		// This resource is marked for deletion.
+		l.Info("Cleaning up")
+
+		// Remove our finalizer to ensure that we don't block the resource
+		// from being deleted.
+		if err := controllers.RemoveFinalizer(ctx, r.Client, &gw, finalizerName); err != nil {
+			l.Error(err, "Removing finalizer")
+			// Fall through to delete the EPIC resource
+		}
+
+		// Delete the EPIC resource
+		link, announced := gw.Annotations[puregwv1.EPICLinkAnnotation]
+		if announced {
+			err = epic.Delete(link)
+			if err != nil {
+				return controllers.Done, err
+			}
+		}
+
+		return controllers.Done, nil
 	}
 
-	l.Info("processing request", "request", req, "config", gwc)
+	// See if we've already announced this resource.
+	link, announced := gw.Annotations[puregwv1.EPICLinkAnnotation]
+	if announced {
+		l.Info("Previously announced", "link", link)
+		return controllers.Done, nil
+	}
 
-	// Connect to EPIC
-	epic, err := acnodal.NewEPIC(gwc.Spec)
-	if err != nil {
+	l.Info("Reconciling")
+
+	// The resource is not being deleted, and it's our GWClass, so add
+	// our finalizer.
+	if err := controllers.AddFinalizer(ctx, r.Client, &gw, finalizerName); err != nil {
 		return controllers.Done, err
 	}
 
@@ -93,17 +118,78 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Announce the Gateway
-	_, err = epic.AnnounceGateway(group.Links["create-service"], gw.Name, string(gw.ObjectMeta.UID), gw.Spec.Listeners)
+	response, err := epic.AnnounceGateway(group.Links["create-proxy"], gw)
 	if err != nil {
 		return controllers.Done, err
 	}
 
+	// Annotate the Gateway with its URL to mark it as "announced".
+	if err := r.addEpicLink(ctx, &gw, response.Links["self"]); err != nil {
+		return controllers.Done, err
+	}
+	l.Info("Announced", "self-link", response.Links["self"])
+
 	return controllers.Done, nil
 }
 
-// SetupWithManager sets up the controller with the Manager.
-func (r *GatewayReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&gatewayv1a2.Gateway{}).
-		Complete(r)
+func connectToEPIC(ctx context.Context, cl client.Client, gatewayClassName string) (acnodal.EPIC, error) {
+	// Get the owning GatewayClass
+	gc := gatewayv1a2.GatewayClass{}
+	if err := cl.Get(ctx, types.NamespacedName{Name: gatewayClassName}, &gc); err != nil {
+		return nil, fmt.Errorf("Unable to get GatewayClass %s", gatewayClassName)
+	}
+
+	// Check controller name - are we the right controller?
+	if gc.Spec.ControllerName != "acnodal.io/puregw" {
+		return nil, nil
+	}
+
+	// Get the PureGW GatewayClassConfig referred to by the GatewayClass
+	gwcName := types.NamespacedName{Name: string(gc.Spec.ParametersRef.Name)}
+	if gc.Spec.ParametersRef.Namespace != nil {
+		gwcName.Namespace = string(*gc.Spec.ParametersRef.Namespace)
+	}
+	gwc := puregwv1.GatewayClassConfig{}
+	if err := cl.Get(ctx, gwcName, &gwc); err != nil {
+		return nil, fmt.Errorf("Unable to get GatewayClassConfig %s", gc.Spec.ParametersRef.Name)
+	}
+
+	// Connect to EPIC
+	return acnodal.NewEPIC(gwc.Spec)
+}
+
+// addEpicLink adds an EPICLinkAnnotation annotation to gw.
+func (r *GatewayReconciler) addEpicLink(ctx context.Context, gw *gatewayv1a2.Gateway, link string) error {
+	var (
+		patch      []map[string]interface{}
+		patchBytes []byte
+		err        error
+	)
+
+	if gw.Annotations == nil {
+		// If this is the first annotation then we need to wrap it in an
+		// object
+		patch = []map[string]interface{}{{
+			"op":    "add",
+			"path":  "/metadata/annotations",
+			"value": map[string]string{puregwv1.EPICLinkAnnotation: link},
+		}}
+	} else {
+		// If there are other annotations then we can just add this one
+		patch = []map[string]interface{}{{
+			"op":    "add",
+			"path":  puregwv1.EPICLinkAnnotationPatch,
+			"value": link,
+		}}
+	}
+
+	// apply the patch
+	if patchBytes, err = json.Marshal(patch); err != nil {
+		return err
+	}
+	if err := r.Patch(ctx, gw, client.RawPatch(types.JSONPatchType, patchBytes)); err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -161,9 +161,15 @@ func TestRouteAnnouncements(t *testing.T) {
 		t.Errorf("got error %+v", err)
 	}
 
-	route := RouteSpec{HTTP: gatewayv1a2.HTTPRouteSpec{
-		Hostnames: []gatewayv1a2.Hostname{"test-host", "other-host"},
-	}}
+	route := RouteSpec{
+		ClientRef: ClientRef{
+			ClusterID: "test",
+			Namespace: "puregw",
+			Name:      GroupName,
+			UID:       "a044f348-f80c-4ac0-b911-6ed45e37994a",
+		},
+		HTTP: gatewayv1a2.HTTPRouteSpec{Hostnames: []gatewayv1a2.Hostname{"test-host", "other-host"}},
+	}
 	rt, err := e.AnnounceRoute(a.Links["create-route"], "test-route", route)
 	if err != nil {
 		t.Errorf("got error %+v", err)
