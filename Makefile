@@ -13,7 +13,7 @@ VERSION ?= 0.0.1
 IMAGE_TAG_BASE ?= puregw.io/puregw
 
 # Image URL to use all building/pushing image targets
-IMG ?= controller:latest
+IMG ?= ${IMAGE_TAG_BASE}/controller:${VERSION}
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.22
 
