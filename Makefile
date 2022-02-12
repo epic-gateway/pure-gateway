@@ -87,9 +87,14 @@ install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~
 uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/crd | kubectl delete -f -
 
+deploy: CACHE != mktemp
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+# cache kustomization.yaml because "kustomize edit" modifies it
+	cp config/manager/kustomization.yaml ${CACHE}
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default | kubectl apply -f -
+# restore kustomization.yaml
+	cp ${CACHE} config/manager/kustomization.yaml
 
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/default | kubectl delete -f -
