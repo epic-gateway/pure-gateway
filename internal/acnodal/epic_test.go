@@ -51,15 +51,18 @@ func TestMain(m *testing.M) {
 }
 
 func MustEPIC(t *testing.T) EPIC {
-	e, err := NewEPIC(puregwv1.GatewayClassConfigSpec{
+	cs := puregwv1.GatewayClassConfigSpec{
 		EPIC: &puregwv1.EPIC{
 			Host:       TestHarnessEPIC,
-			SvcAccount: ServiceAccount,
-			SvcKey:     ServiceKey,
 			UserNS:     UserNS,
 			GWTemplate: GroupName,
 		},
-	})
+	}
+	u, err := cs.EPICAPIServiceURL()
+	if err != nil {
+		t.Fatal("formatting EPIC URL", err)
+	}
+	e, err := NewEPIC(u, ServiceAccount, ServiceKey)
 	if err != nil {
 		t.Fatal("initializing EPIC", err)
 	}

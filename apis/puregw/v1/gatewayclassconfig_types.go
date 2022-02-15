@@ -6,8 +6,10 @@ package v1
 
 import (
 	"fmt"
+	"net/url"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // EPIC configures the allocator to work with the Acnodal Enterprise
@@ -28,8 +30,8 @@ type GatewayClassConfigSpec struct {
 
 // EPICAPIServiceURL returns the URL to connect to the EPIC instance
 // described by this ServiceGroupEPICSpec.
-func (gccs *GatewayClassConfigSpec) EPICAPIServiceURL() string {
-	return fmt.Sprintf("https://%s/api/epic/accounts/%s/groups/%s", gccs.EPIC.Host, gccs.EPIC.UserNS, gccs.EPIC.GWTemplate)
+func (gccs *GatewayClassConfigSpec) EPICAPIServiceURL() (*url.URL, error) {
+	return url.Parse(fmt.Sprintf("https://%s/api/epic/accounts/%s/groups/%s", gccs.EPIC.Host, gccs.EPIC.UserNS, gccs.EPIC.GWTemplate))
 }
 
 // GatewayClassConfigStatus defines the observed state of GatewayClassConfig
@@ -48,6 +50,10 @@ type GatewayClassConfig struct {
 
 	Spec   GatewayClassConfigSpec   `json:"spec,omitempty"`
 	Status GatewayClassConfigStatus `json:"status,omitempty"`
+}
+
+func (gcc *GatewayClassConfig) NamespacedName() types.NamespacedName {
+	return types.NamespacedName{Namespace: gcc.Namespace, Name: gcc.Name}
 }
 
 //+kubebuilder:object:root=true

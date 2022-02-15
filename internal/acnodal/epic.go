@@ -18,8 +18,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-
-	puregwv1 "acnodal.io/puregw/apis/puregw/v1"
 )
 
 const (
@@ -229,16 +227,12 @@ type RouteResponse struct {
 	Route   RouteSpec `json:"route"`
 }
 
-// New initializes a new EPIC instance. If error is non-nil then the
-// instance shouldn't be used.
-func NewEPIC(config puregwv1.GatewayClassConfigSpec) (EPIC, error) {
-	// Use the hostname from the service group, but reset the path.  EPIC
-	// and Netbox each have their own API URL schemes so we only need
-	// the protocol, host, port, credentials, etc.
-	baseURL, err := url.Parse(config.EPICAPIServiceURL())
-	if err != nil {
-		return nil, err
-	}
+// NewEPIC initializes a new EPIC instance. If error is non-nil then
+// the instance shouldn't be used.
+func NewEPIC(epicURL *url.URL, svcAccount string, svcKey string) (EPIC, error) {
+	// Use the hostname from the service group, but reset the path.  We
+	// only need the protocol, host, port, credentials, etc.
+	baseURL := *epicURL
 	baseURL.Path = "/"
 
 	// Set up a REST client to talk to the EPIC
@@ -248,14 +242,14 @@ func NewEPIC(config puregwv1.GatewayClassConfigSpec) (EPIC, error) {
 			"Content-Type": "application/json",
 			"accept":       "application/json",
 		}).
-		SetBasicAuth(config.EPIC.SvcAccount, config.EPIC.SvcKey).
+		SetBasicAuth(svcAccount, svcKey).
 		SetRetryCount(2).
 		SetRetryWaitTime(time.Second).
 		SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}). // FIXME: figure out how to *not* disable cert checks
 		SetRedirectPolicy(resty.FlexibleRedirectPolicy(2))
 
 	// Initialize the EPIC instance
-	return &epic{http: *r, groupURL: config.EPICAPIServiceURL()}, nil
+	return &epic{http: *r, groupURL: epicURL.String()}, nil
 }
 
 // GetAccount requests an account from the EPIC.

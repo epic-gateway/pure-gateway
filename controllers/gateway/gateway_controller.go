@@ -64,13 +64,18 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return controllers.Done, client.IgnoreNotFound(err)
 	}
 
-	epic, err := connectToEPIC(ctx, r.Client, string(gw.Spec.GatewayClassName))
+	config, err := getEPICConfig(ctx, r.Client, string(gw.Spec.GatewayClassName))
 	if err != nil {
 		return controllers.Done, err
 	}
-	if epic == nil {
+	if config == nil {
 		l.Info("Not our ControllerName, will ignore")
 		return controllers.Done, nil
+	}
+
+	epic, err := connectToEPIC(ctx, r.Client, &config.Namespace, config.Name)
+	if err != nil {
+		return controllers.Done, err
 	}
 
 	if !gw.ObjectMeta.DeletionTimestamp.IsZero() {
@@ -124,7 +129,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Annotate the Gateway with its URL to mark it as "announced".
-	if err := r.addEpicLink(ctx, &gw, response.Links["self"]); err != nil {
+	if err := r.addEpicLink(ctx, &gw, response.Links["self"], config.NamespacedName().String()); err != nil {
 		return controllers.Done, err
 	}
 	l.Info("Announced", "self-link", response.Links["self"])
@@ -132,7 +137,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	return controllers.Done, nil
 }
 
-func connectToEPIC(ctx context.Context, cl client.Client, gatewayClassName string) (acnodal.EPIC, error) {
+func getEPICConfig(ctx context.Context, cl client.Client, gatewayClassName string) (*puregwv1.GatewayClassConfig, error) {
 	// Get the owning GatewayClass
 	gc := gatewayv1a2.GatewayClass{}
 	if err := cl.Get(ctx, types.NamespacedName{Name: gatewayClassName}, &gc); err != nil {
@@ -154,12 +159,30 @@ func connectToEPIC(ctx context.Context, cl client.Client, gatewayClassName strin
 		return nil, fmt.Errorf("Unable to get GatewayClassConfig %s", gc.Spec.ParametersRef.Name)
 	}
 
+	return &gwc, nil
+}
+
+func connectToEPIC(ctx context.Context, cl client.Client, namespace *string, name string) (acnodal.EPIC, error) {
+	// Get the PureGW GatewayClassConfig referred to by the GatewayClass
+	gwcName := types.NamespacedName{Name: name}
+	if namespace != nil {
+		gwcName.Namespace = *namespace
+	}
+	gcc := puregwv1.GatewayClassConfig{}
+	if err := cl.Get(ctx, gwcName, &gcc); err != nil {
+		return nil, fmt.Errorf("Unable to get GatewayClassConfig %s", gwcName.String())
+	}
+
 	// Connect to EPIC
-	return acnodal.NewEPIC(gwc.Spec)
+	epicURL, err := gcc.Spec.EPICAPIServiceURL()
+	if err != nil {
+		return nil, err
+	}
+	return acnodal.NewEPIC(epicURL, gcc.Spec.EPIC.SvcAccount, gcc.Spec.EPIC.SvcKey)
 }
 
 // addEpicLink adds an EPICLinkAnnotation annotation to gw.
-func (r *GatewayReconciler) addEpicLink(ctx context.Context, gw *gatewayv1a2.Gateway, link string) error {
+func (r *GatewayReconciler) addEpicLink(ctx context.Context, gw *gatewayv1a2.Gateway, link string, configName string) error {
 	var (
 		patch      []map[string]interface{}
 		patchBytes []byte
@@ -170,17 +193,27 @@ func (r *GatewayReconciler) addEpicLink(ctx context.Context, gw *gatewayv1a2.Gat
 		// If this is the first annotation then we need to wrap it in an
 		// object
 		patch = []map[string]interface{}{{
-			"op":    "add",
-			"path":  "/metadata/annotations",
-			"value": map[string]string{puregwv1.EPICLinkAnnotation: link},
+			"op":   "add",
+			"path": "/metadata/annotations",
+			"value": map[string]string{
+				puregwv1.EPICLinkAnnotation:   link,
+				puregwv1.EPICConfigAnnotation: configName,
+			},
 		}}
 	} else {
 		// If there are other annotations then we can just add this one
-		patch = []map[string]interface{}{{
-			"op":    "add",
-			"path":  puregwv1.EPICLinkAnnotationPatch,
-			"value": link,
-		}}
+		patch = []map[string]interface{}{
+			{
+				"op":    "add",
+				"path":  puregwv1.EPICLinkAnnotationPatch,
+				"value": link,
+			},
+			{
+				"op":    "add",
+				"path":  puregwv1.EPICConfigAnnotationPatch,
+				"value": configName,
+			},
+		}
 	}
 
 	// apply the patch

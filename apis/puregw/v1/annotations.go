@@ -13,4 +13,11 @@ const (
 	// EPICLinkAnnotationPatch is the EPICLinkAnnotation encoded so it
 	// can be used in a JSON patch
 	EPICLinkAnnotationPatch string = "/metadata/annotations/acnodal.io~1epic-link"
+
+	// EPICConfigAnnotation stores the config to the corresponding resource
+	// on the EPIC system.
+	EPICConfigAnnotation string = "acnodal.io/epic-config"
+	// EPICConfigAnnotationPatch is the EPICConfigAnnotation encoded so it
+	// can be used in a JSON patch
+	EPICConfigAnnotationPatch string = "/metadata/annotations/acnodal.io~1epic-config"
 )

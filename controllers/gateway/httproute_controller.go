@@ -7,6 +7,8 @@ package gateway
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -70,23 +72,6 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return controllers.Done, client.IgnoreNotFound(err)
 	}
 
-	// See if we are the chosen controller class
-	gw := gatewayv1a2.Gateway{}
-	// FIXME: need to handle multiple parents
-	if err := getParentGW(ctx, r.Client, route.Spec.ParentRefs[0], &gw); err != nil {
-		l.Info("Can't get parent, will retry", "parentRef", route.Spec.ParentRefs[0])
-		return controllers.TryAgain, nil
-	}
-
-	epic, err := connectToEPIC(ctx, r.Client, string(gw.Spec.GatewayClassName))
-	if err != nil {
-		return controllers.Done, err
-	}
-	if epic == nil {
-		l.Info("Not our ControllerName, will ignore")
-		return controllers.Done, nil
-	}
-
 	// Clean up if this resource is marked for deletion.
 	if !route.ObjectMeta.DeletionTimestamp.IsZero() {
 		l.Info("Cleaning up")
@@ -98,15 +83,55 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			// Fall through to delete the EPIC resource
 		}
 
-		// Delete the EPIC resource
+		// Delete the EPIC resources
 		link, announced := route.Annotations[puregwv1.EPICLinkAnnotation]
 		if announced {
+			// Get cached config name
+			configName, err := splitNSName(route.Annotations[puregwv1.EPICConfigAnnotation])
+			if err != nil {
+				return controllers.Done, err
+			}
+			epic, err := connectToEPIC(ctx, r.Client, &configName.Namespace, configName.Name)
+			if err != nil {
+				return controllers.Done, err
+			}
 			err = epic.Delete(link)
 			if err != nil {
 				return controllers.Done, err
 			}
+
+			// FIXME: clean up slices. Need to delete the slices that are
+			// referenced only by this route
 		}
 
+		return controllers.Done, nil
+	}
+
+	// Try to get the Gateway to which we refer, and keep trying until
+	// we can
+	gw := gatewayv1a2.Gateway{}
+	// FIXME: need to handle multiple parents
+	if err := parentGW(ctx, r.Client, route.Spec.ParentRefs[0], &gw); err != nil {
+		l.Info("Can't get parent, will retry", "parentRef", route.Spec.ParentRefs[0])
+		return controllers.TryAgain, nil
+	}
+
+	// See if we're the chose controller
+	config, err := getEPICConfig(ctx, r.Client, string(gw.Spec.GatewayClassName))
+	if err != nil {
+		return controllers.Done, err
+	}
+	if config == nil {
+		l.Info("Not our ControllerName, will ignore")
+		return controllers.Done, nil
+	}
+
+	epic, err := connectToEPIC(ctx, r.Client, &config.Namespace, config.Name)
+	if err != nil {
+		return controllers.Done, err
+	}
+	if epic == nil {
+		l.Info("Not our ControllerName, will ignore")
 		return controllers.Done, nil
 	}
 
@@ -182,7 +207,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 
 		// Annotate the Route to mark it as "announced".
-		if err := addEpicLink(ctx, r.Client, &route, routeResp.Links["self"]); err != nil {
+		if err := addEpicLink(ctx, r.Client, &route, routeResp.Links["self"], config.NamespacedName().String()); err != nil {
 			return controllers.Done, err
 		}
 		l.Info("Announced", "epic-link", route.Annotations[puregwv1.EPICLinkAnnotation])
@@ -248,7 +273,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 
 		// Annotate the Slice to mark it as "announced".
-		if err := addSliceEpicLink(ctx, r.Client, slice, sliceResp.Links["self"]); err != nil {
+		if err := addSliceEpicLink(ctx, r.Client, slice, sliceResp.Links["self"], config.NamespacedName().String()); err != nil {
 			l.Error(err, "adding EPIC link to slice")
 			continue
 		}
@@ -258,9 +283,9 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	return controllers.Done, nil
 }
 
-// getParentGW gets the parent Gateway resource pointed to by the
+// parentGW gets the parent Gateway resource pointed to by the
 // provided ParentRef.
-func getParentGW(ctx context.Context, cl client.Client, ref gatewayv1a2.ParentRef, gw *gatewayv1a2.Gateway) error {
+func parentGW(ctx context.Context, cl client.Client, ref gatewayv1a2.ParentRef, gw *gatewayv1a2.Gateway) error {
 	gwName := types.NamespacedName{Namespace: "default", Name: string(ref.Name)}
 	if ref.Namespace != nil {
 		gwName.Namespace = string(*ref.Namespace)
@@ -274,6 +299,9 @@ func getParentGW(ctx context.Context, cl client.Client, ref gatewayv1a2.ParentRe
 // later. If err is non-nil then the array of EndpointSlices is
 // invalid.
 func referencedSlices(ctx context.Context, cl client.Client, route *gatewayv1a2.HTTPRoute) (slices []*discoveryv1.EndpointSlice, incomplete bool, err error) {
+	// Assume that we can reach all of our services.
+	incomplete = false
+
 	// Check each rule in the Route.
 	for _, rule := range route.Spec.Rules {
 
@@ -286,27 +314,27 @@ func referencedSlices(ctx context.Context, cl client.Client, route *gatewayv1a2.
 			if ref.Namespace != nil {
 				svcName.Namespace = string(*ref.Namespace)
 			}
-			err := cl.Get(ctx, svcName, &svc)
+			err = cl.Get(ctx, svcName, &svc)
 			if err != nil {
 				// If the service doesn't exist yet then tell the controller
 				// to back off and retry.
 				if apierrors.IsNotFound(err) {
-					return slices, true, nil
+					incomplete = true
 				}
 
 				// If it's some other sort of error then tell the controller.
-				return slices, false, err
+				return
 			}
 
 			// Get the slices that belong to this service.
 			sliceList := discoveryv1.EndpointSliceList{}
-			if err := cl.List(ctx, &sliceList, &client.ListOptions{
+			if err = cl.List(ctx, &sliceList, &client.ListOptions{
 				Namespace: route.Namespace,
 				LabelSelector: labels.SelectorFromSet(map[string]string{
 					"kubernetes.io/service-name": svc.Name,
 				}),
 			}); err != nil {
-				return slices, false, err
+				return
 			}
 
 			// Add each slice to the return array.
@@ -316,11 +344,11 @@ func referencedSlices(ctx context.Context, cl client.Client, route *gatewayv1a2.
 		}
 	}
 
-	return slices, false, nil
+	return
 }
 
 // addEpicLink adds an EPICLinkAnnotation annotation to the Route.
-func addEpicLink(ctx context.Context, cl client.Client, route *gatewayv1a2.HTTPRoute, link string) error {
+func addEpicLink(ctx context.Context, cl client.Client, route *gatewayv1a2.HTTPRoute, link string, configName string) error {
 	var (
 		patch      []map[string]interface{}
 		patchBytes []byte
@@ -331,17 +359,27 @@ func addEpicLink(ctx context.Context, cl client.Client, route *gatewayv1a2.HTTPR
 		// If this is the first annotation then we need to wrap it in an
 		// object
 		patch = []map[string]interface{}{{
-			"op":    "add",
-			"path":  "/metadata/annotations",
-			"value": map[string]string{puregwv1.EPICLinkAnnotation: link},
+			"op":   "add",
+			"path": "/metadata/annotations",
+			"value": map[string]string{
+				puregwv1.EPICLinkAnnotation:   link,
+				puregwv1.EPICConfigAnnotation: configName,
+			},
 		}}
 	} else {
 		// If there are other annotations then we can just add this one
-		patch = []map[string]interface{}{{
-			"op":    "add",
-			"path":  puregwv1.EPICLinkAnnotationPatch,
-			"value": link,
-		}}
+		patch = []map[string]interface{}{
+			{
+				"op":    "add",
+				"path":  puregwv1.EPICLinkAnnotationPatch,
+				"value": link,
+			},
+			{
+				"op":    "add",
+				"path":  puregwv1.EPICConfigAnnotationPatch,
+				"value": configName,
+			},
+		}
 	}
 
 	// apply the patch
@@ -356,7 +394,7 @@ func addEpicLink(ctx context.Context, cl client.Client, route *gatewayv1a2.HTTPR
 }
 
 // addEpicLink adds an EPICLinkAnnotation annotation to the Route.
-func addSliceEpicLink(ctx context.Context, cl client.Client, slice *discoveryv1.EndpointSlice, link string) error {
+func addSliceEpicLink(ctx context.Context, cl client.Client, slice *discoveryv1.EndpointSlice, link string, configName string) error {
 	var (
 		patch      []map[string]interface{}
 		patchBytes []byte
@@ -367,17 +405,27 @@ func addSliceEpicLink(ctx context.Context, cl client.Client, slice *discoveryv1.
 		// If this is the first annotation then we need to wrap it in an
 		// object
 		patch = []map[string]interface{}{{
-			"op":    "add",
-			"path":  "/metadata/annotations",
-			"value": map[string]string{puregwv1.EPICLinkAnnotation: link},
+			"op":   "add",
+			"path": "/metadata/annotations",
+			"value": map[string]string{
+				puregwv1.EPICLinkAnnotation:   link,
+				puregwv1.EPICConfigAnnotation: configName,
+			},
 		}}
 	} else {
 		// If there are other annotations then we can just add this one
-		patch = []map[string]interface{}{{
-			"op":    "add",
-			"path":  puregwv1.EPICLinkAnnotationPatch,
-			"value": link,
-		}}
+		patch = []map[string]interface{}{
+			{
+				"op":    "add",
+				"path":  puregwv1.EPICLinkAnnotationPatch,
+				"value": link,
+			},
+			{
+				"op":    "add",
+				"path":  puregwv1.EPICConfigAnnotationPatch,
+				"value": configName,
+			},
+		}
 	}
 
 	// apply the patch
@@ -389,4 +437,13 @@ func addSliceEpicLink(ctx context.Context, cl client.Client, slice *discoveryv1.
 	}
 
 	return nil
+}
+
+func splitNSName(name string) (*types.NamespacedName, error) {
+	parts := strings.Split(name, string(types.Separator))
+	if len(parts) < 2 {
+		return nil, fmt.Errorf("Malformed NamespaceName: %q", parts)
+	}
+
+	return &types.NamespacedName{Namespace: parts[0], Name: parts[1]}, nil
 }

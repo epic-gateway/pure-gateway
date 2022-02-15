@@ -66,11 +66,11 @@ func (r *HTTPRouteAgentReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return controllers.Done, client.IgnoreNotFound(err)
 	}
 
-	epic, err := connectToEPIC(ctx, r.Client, string(gw.Spec.GatewayClassName))
+	config, err := getEPICConfig(ctx, r.Client, string(gw.Spec.GatewayClassName))
 	if err != nil {
 		return controllers.Done, err
 	}
-	if epic == nil {
+	if config == nil {
 		l.Info("Not our ControllerName, will ignore")
 		return controllers.Done, nil
 	}
