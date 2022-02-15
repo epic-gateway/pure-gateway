@@ -19,7 +19,8 @@ spec:
         control-plane: controller-agent
     spec:
       containers:
-      - command:
+      - name: agent
+        command:
         - /agent
         env:
         - name: EPIC_NODE_NAME
@@ -28,7 +29,6 @@ spec:
               fieldPath: spec.nodeName
         image: controller:latest
         imagePullPolicy: Always
-        name: agent
         ports:
         - containerPort: 7472
           name: monitoring
@@ -55,6 +55,22 @@ spec:
             port: 8081
           initialDelaySeconds: 5
           periodSeconds: 10
+      - name: pinger
+        command:
+        - /opt/acnodal/bin/gue_ping_svc_auto
+        - "25"
+        image: controller:latest
+        securityContext:
+          privileged: true
+          allowPrivilegeEscalation: true
+          capabilities:
+            add:
+            - NET_ADMIN
+            - NET_RAW
+            - SYS_ADMIN
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false
       hostNetwork: true
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 2

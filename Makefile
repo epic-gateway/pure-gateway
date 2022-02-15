@@ -81,7 +81,9 @@ run-agent: manifests generate fmt vet ## Run an agent from your host.
 	EPIC_NODE_NAME=mk8s1 go run ./cmd/agent/...
 
 docker-build: test ## Build docker image with the manager.
-	docker build -t ${IMG} .
+	docker build -t ${IMG} \
+	--build-arg GITLAB_TOKEN \
+	.
 
 docker-push: ## Push docker image with the manager.
 	docker push ${IMG}

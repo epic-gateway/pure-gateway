@@ -35,8 +35,10 @@ spec:
           metadata:
             type: object
           spec:
-            description: GatewayClassConfigSpec configures the allocator.  For examples,
-              see the "config/" directory in the PureGW source tree.
+            description: 'GatewayClassConfigSpec configures the EPIC Gateway client.  It
+              has two parts: one for communication with the EPIC server, and one for
+              configuration of the TrueIngress components on the client cluster. For
+              examples, see the "config/" directory in the PureGW source tree.'
             properties:
               epic:
                 description: EPIC configures the allocator to work with the Acnodal
@@ -59,8 +61,61 @@ spec:
                 - service-key
                 - user-namespace
                 type: object
+              trueIngress:
+                description: TrueIngress configures the announcers to announce service
+                  addresses to the Acnodal Enterprise GateWay.
+                properties:
+                  decapAttachment:
+                    description: DecapAttachment configures how the agent will attach
+                      the Packet Forwarding Components for packet decapsulation.
+                    properties:
+                      direction:
+                        description: Direction is either "ingress" or "egress".
+                        type: string
+                      flags:
+                        description: Flags configure the PFC component's behavior.
+                        type: integer
+                      interface:
+                        description: Interface is the name of the interface.
+                        type: string
+                      qid:
+                        description: QID is a magic parameter that the PFC needs.
+                        type: integer
+                    required:
+                    - direction
+                    - flags
+                    - interface
+                    - qid
+                    type: object
+                  encapAttachment:
+                    description: EncapAttachment configures how the agent will attach
+                      the Packet Forwarding Components for packet encapsulation.
+                    properties:
+                      direction:
+                        description: Direction is either "ingress" or "egress".
+                        type: string
+                      flags:
+                        description: Flags configure the PFC component's behavior.
+                        type: integer
+                      interface:
+                        description: Interface is the name of the interface.
+                        type: string
+                      qid:
+                        description: QID is a magic parameter that the PFC needs.
+                        type: integer
+                    required:
+                    - direction
+                    - flags
+                    - interface
+                    - qid
+                    type: object
+                required:
+                - decapAttachment
+                - encapAttachment
+                type: object
             required:
             - epic
+            - trueIngress
             type: object
           status:
             description: GatewayClassConfigStatus defines the observed state of GatewayClassConfig

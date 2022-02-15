@@ -10,3 +10,14 @@ spec:
     service-key: password1
     user-namespace: root
     gateway-template: gatewayhttp
+  trueIngress:
+    decapAttachment:
+      direction: ingress
+      interface: default
+      flags: 1
+      qid: 0
+    encapAttachment:
+      direction: egress
+      interface: default
+      flags: 16
+      qid: 1

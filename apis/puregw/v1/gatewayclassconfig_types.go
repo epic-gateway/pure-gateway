@@ -22,10 +22,42 @@ type EPIC struct {
 	GWTemplate string `json:"gateway-template"`
 }
 
-// GatewayClassConfigSpec configures the allocator.  For examples, see
-// the "config/" directory in the PureGW source tree.
+// Attachment contains the configuration data that lets us attach
+// our packet forwarding components to a network interface.
+type Attachment struct {
+	// Interface is the name of the interface.
+	Interface string `json:"interface"`
+
+	// Direction is either "ingress" or "egress".
+	Direction string `json:"direction"`
+
+	// Flags configure the PFC component's behavior.
+	Flags int `json:"flags"`
+
+	// QID is a magic parameter that the PFC needs.
+	QID int `json:"qid"`
+}
+
+// TrueIngress configures the announcers to announce service
+// addresses to the Acnodal Enterprise GateWay.
+type TrueIngress struct {
+	// EncapAttachment configures how the agent will attach the Packet
+	// Forwarding Components for packet encapsulation.
+	EncapAttachment Attachment `json:"encapAttachment"`
+
+	// DecapAttachment configures how the agent will attach the Packet
+	// Forwarding Components for packet decapsulation.
+	DecapAttachment Attachment `json:"decapAttachment"`
+}
+
+// GatewayClassConfigSpec configures the EPIC Gateway client.  It has
+// two parts: one for communication with the EPIC server, and one for
+// configuration of the TrueIngress components on the client
+// cluster. For examples, see the "config/" directory in the PureGW
+// source tree.
 type GatewayClassConfigSpec struct {
-	EPIC *EPIC `json:"epic"`
+	EPIC        *EPIC        `json:"epic"`
+	TrueIngress *TrueIngress `json:"trueIngress"`
 }
 
 // EPICAPIServiceURL returns the URL to connect to the EPIC instance
