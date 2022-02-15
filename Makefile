@@ -72,9 +72,13 @@ test: manifests generate fmt vet envtest ## Run all tests, even ones that need e
 
 build: generate fmt vet ## Build manager binary.
 	go build -o bin/manager ./cmd/manager/...
+	go build -o bin/agent ./cmd/agent/...
 
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./cmd/manager/...
+
+run-agent: manifests generate fmt vet ## Run an agent from your host.
+	EPIC_NODE_NAME=mk8s1 go run ./cmd/agent/...
 
 docker-build: test ## Build docker image with the manager.
 	docker build -t ${IMG} .
@@ -90,14 +94,17 @@ install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~
 uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/crd | kubectl delete -f -
 
-deploy: CACHE != mktemp
+deploy: CACHE != mktemp --directory
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 # cache kustomization.yaml because "kustomize edit" modifies it
-	cp config/manager/kustomization.yaml ${CACHE}
+	cp config/agent/kustomization.yaml ${CACHE}/kustomization-agent.yaml
+	cp config/manager/kustomization.yaml ${CACHE}/kustomization-manager.yaml
+	cd config/agent && $(KUSTOMIZE) edit set image controller=${IMG}
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default | kubectl apply -f -
 # restore kustomization.yaml
-	cp ${CACHE} config/manager/kustomization.yaml
+	cp ${CACHE}/kustomization-agent.yaml config/agent/kustomization.yaml
+	cp ${CACHE}/kustomization-manager.yaml config/manager/kustomization.yaml
 
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/default | kubectl delete -f -
@@ -128,4 +135,3 @@ GOBIN=$(PROJECT_DIR)/bin go get $(2) ;\
 rm -rf $$TMP_DIR ;\
 }
 endef
-
