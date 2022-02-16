@@ -16,6 +16,7 @@ resources:
 - api:
     crdVersion: v1
     namespaced: true
+  controller: true
   domain: acnodal.io
   group: puregw
   kind: GatewayClassConfig

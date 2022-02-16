@@ -23,6 +23,7 @@ import (
 
 	puregwv1 "acnodal.io/puregw/apis/puregw/v1"
 	gatewaycontrollers "acnodal.io/puregw/controllers/gateway"
+	puregwcontrollers "acnodal.io/puregw/controllers/puregw"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -68,6 +69,13 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "HTTPRouteAgent")
+		os.Exit(1)
+	}
+	if err = (&puregwcontrollers.GatewayClassConfigAgentReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "GatewayClassConfigAgent")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
