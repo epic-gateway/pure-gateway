@@ -7,6 +7,7 @@ package main
 import (
 	"flag"
 	"os"
+	"os/exec"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -51,6 +52,14 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	// Start the GUE ping utility.
+	pinger := exec.Command("/opt/acnodal/bin/gue_ping_svc_auto", "25")
+	err := pinger.Start()
+	if err != nil {
+		setupLog.Error(err, "Starting pinger")
+		os.Exit(1)
+	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
