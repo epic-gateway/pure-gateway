@@ -82,21 +82,28 @@ func (r *EndpointSliceReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			// Fall through to delete the EPIC resource
 		}
 
-		// FIXME: Delete the EPIC resource
-
-		return controllers.Done, nil
+		// Delete the EPIC resource.
+		configName, err := controllers.SplitNSName(slice.Annotations[puregwv1.EPICConfigAnnotation])
+		if err != nil {
+			return controllers.Done, err
+		}
+		epic, err := controllers.ConnectToEPIC(ctx, r.Client, &configName.Namespace, configName.Name)
+		if err != nil {
+			return controllers.Done, err
+		}
+		return controllers.Done, epic.Delete(link)
 	}
 
 	l.Info("Reconciling")
 
-	// Update slice
-	l.Info("FIXME: Update slice", "slice", link)
-
-	// The resource is not being deleted, and it's our GWClass, so add
-	// our finalizer.
+	// The resource is not being deleted, and it's interesting to EPIC,
+	// so add our finalizer.
 	if err := controllers.AddFinalizer(ctx, r.Client, &slice, finalizerName); err != nil {
 		return controllers.Done, err
 	}
+
+	// Update slice
+	l.Info("FIXME: Update slice", "slice", link)
 
 	return ctrl.Result{}, nil
 }

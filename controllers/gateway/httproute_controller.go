@@ -7,8 +7,6 @@ package gateway
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -87,11 +85,11 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		link, announced := route.Annotations[puregwv1.EPICLinkAnnotation]
 		if announced {
 			// Get cached config name
-			configName, err := splitNSName(route.Annotations[puregwv1.EPICConfigAnnotation])
+			configName, err := controllers.SplitNSName(route.Annotations[puregwv1.EPICConfigAnnotation])
 			if err != nil {
 				return controllers.Done, err
 			}
-			epic, err := connectToEPIC(ctx, r.Client, &configName.Namespace, configName.Name)
+			epic, err := controllers.ConnectToEPIC(ctx, r.Client, &configName.Namespace, configName.Name)
 			if err != nil {
 				return controllers.Done, err
 			}
@@ -126,7 +124,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return controllers.Done, nil
 	}
 
-	epic, err := connectToEPIC(ctx, r.Client, &config.Namespace, config.Name)
+	epic, err := controllers.ConnectToEPIC(ctx, r.Client, &config.Namespace, config.Name)
 	if err != nil {
 		return controllers.Done, err
 	}
@@ -437,13 +435,4 @@ func addSliceEpicLink(ctx context.Context, cl client.Client, slice *discoveryv1.
 	}
 
 	return nil
-}
-
-func splitNSName(name string) (*types.NamespacedName, error) {
-	parts := strings.Split(name, string(types.Separator))
-	if len(parts) < 2 {
-		return nil, fmt.Errorf("Malformed NamespaceName: %q", parts)
-	}
-
-	return &types.NamespacedName{Namespace: parts[0], Name: parts[1]}, nil
 }
