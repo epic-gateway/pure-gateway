@@ -1,0 +1,13 @@
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: controller-agent
+  namespace: system
+spec:
+  template:
+    spec:
+      hostAliases:
+      - ip: 192.168.254.200
+        hostnames:
+        - epic-ctl
