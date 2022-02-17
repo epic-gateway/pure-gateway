@@ -65,6 +65,9 @@ vet: ## Run go vet against code.
 unit-test: manifests generate fmt vet envtest ## Run unit tests (no external resources needed).
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -short -coverprofile cover.out
 
+check: manifests generate fmt vet envtest ## Run "short" tests only.
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -short -coverprofile cover.out
+
 test: manifests generate fmt vet envtest ## Run all tests, even ones that need external resources.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
 
