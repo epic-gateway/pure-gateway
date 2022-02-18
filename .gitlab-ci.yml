@@ -1,0 +1,68 @@
+.tag-setup: &tag-setup
+- |
+  if [ -n "${CI_COMMIT_TAG}" ] ; then
+    # If this build is from a git tag, use that as the docker tag. The
+    # git tag must be acceptable to Helm's semver validator!
+    export TAG_SPECIFIC="${CI_COMMIT_TAG}"
+  else
+    # If this build is from a branch, use the name and sha as the
+    # docker tag.
+    export TAG_SPECIFIC="v0.0.0-${CI_COMMIT_REF_NAME}-${CI_COMMIT_SHORT_SHA}"
+    # Build both a commit-specific build and a branch-latest build.
+    export TAG_LATEST="v0.0.0-${CI_COMMIT_REF_NAME}-latest"
+  fi
+
+.alpine-setup: &alpine-setup
+- apk add bash gettext make wget
+
+.debian-setup: &debian-setup
+- apt-get update
+- apt-get install -y gettext-base
+
+.docker-setup: &docker-setup
+- docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY
+- mkdir -p ~/.ssh && chmod 700 ~/.ssh
+- ssh-keyscan -H gitlab.com >> ~/.ssh/known_hosts
+
+.git-setup: &git-setup
+- git config --global url."https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.com/".insteadOf "https://gitlab.com/"
+
+image: docker:20.10.12-git
+services:
+- docker:20.10.12-dind
+variables:
+  # https://docs.gitlab.com/12.10/ee/ci/docker/using_docker_build.html#tls-enabled
+  DOCKER_TLS_CERTDIR: "/certs"
+before_script:
+- *alpine-setup
+- *tag-setup
+- *docker-setup
+
+check:
+  image: golang:1.16-bullseye
+  before_script:
+  - *debian-setup
+  - *git-setup
+  script: make check
+
+build-image:
+  script: make GOBIN=dontcare VERSION=${TAG_SPECIFIC} docker-build docker-push
+
+k8s-manifest:
+  image: golang:1.16-bullseye
+  before_script:
+  - *debian-setup
+  - *tag-setup
+  - *git-setup
+  script:
+  - make VERSION=${TAG_SPECIFIC} manifests
+  - 'wget --no-verbose --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --method=PUT --body-file=deploy/epic-gateway.yaml "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/manifest/${TAG_SPECIFIC}/epic-gateway.yaml"'
+  - |
+    if [ -z "${CI_COMMIT_TAG}" ] ; then
+      wget --no-verbose --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --method=PUT --body-file=deploy/epic-gateway.yaml "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/manifest/${TAG_LATEST}/epic-gateway.yaml"
+    fi
+
+  artifacts:
+    paths:
+      - configs/*
+      - deploy/*.yaml

@@ -3,26 +3,25 @@
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
 # - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
-VERSION ?= 0.0.1
+VERSION ?= v0.0.1-${USER}-dev
 
 # IMAGE_TAG_BASE defines the docker.io namespace and part of the image name for remote images.
 # This variable is used to construct full image tags for bundle and catalog images.
 #
 # For example, running 'make bundle-build bundle-push catalog-build catalog-push' will build and push both
 # puregw.io/puregw-bundle:$VERSION and puregw.io/puregw-catalog:$VERSION.
-IMAGE_TAG_BASE ?= puregw.io/puregw
+IMAGE_TAG_BASE ?= registry.gitlab.com/acnodal/epic/gateway
 
 # Image URL to use all building/pushing image targets
 IMG ?= ${IMAGE_TAG_BASE}/controller:${VERSION}
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.22
 
-# Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
-ifeq (,$(shell go env GOBIN))
-GOBIN=$(shell go env GOPATH)/bin
-else
-GOBIN=$(shell go env GOBIN)
-endif
+# Get the currently used golang install path (in GOPATH/bin, unless
+# GOBIN is set). If GOBIN is set then we don't need to run the "go"
+# executable which is useful when we're building Docker images since
+# the Docker-in-Docker images don't have go built in.
+GOBIN ?= $(shell go env GOPATH)/bin
 
 # Setting SHELL to bash allows bash commands to be executed by recipes.
 # This is a requirement for 'setup-envtest.sh' in the test target.
@@ -50,8 +49,19 @@ help: ## Display this help.
 
 ##@ Development
 
-manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
+manifests: CACHE != mktemp --directory
+manifests: controller-gen kustomize ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+# cache kustomization.yaml because "kustomize edit" modifies it
+	cp config/agent/kustomization.yaml ${CACHE}/kustomization-agent.yaml
+	cp config/manager/kustomization.yaml ${CACHE}/kustomization-manager.yaml
+	cd config/agent && $(KUSTOMIZE) edit set image controller=${IMG}
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	$(KUSTOMIZE) build config/default | IMG=$(IMG) envsubst > deploy/epic-gateway.yaml
+	cp deploy/epic-gateway.yaml deploy/epic-gateway-${VERSION}.yaml
+# restore kustomization.yaml
+	cp ${CACHE}/kustomization-agent.yaml config/agent/kustomization.yaml
+	cp ${CACHE}/kustomization-manager.yaml config/manager/kustomization.yaml
 
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
@@ -83,7 +93,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 run-agent: manifests generate fmt vet ## Run an agent from your host.
 	EPIC_NODE_NAME=mk8s1 EPIC_HOST_IP=192.168.254.101 go run ./cmd/agent/...
 
-docker-build: test ## Build docker image with the manager.
+docker-build: ## Build docker image with the manager.
 	docker build -t ${IMG} \
 	--build-arg GITLAB_TOKEN \
 	.
@@ -99,20 +109,11 @@ install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~
 uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/crd | kubectl delete -f -
 
-deploy: CACHE != mktemp --directory
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-# cache kustomization.yaml because "kustomize edit" modifies it
-	cp config/agent/kustomization.yaml ${CACHE}/kustomization-agent.yaml
-	cp config/manager/kustomization.yaml ${CACHE}/kustomization-manager.yaml
-	cd config/agent && $(KUSTOMIZE) edit set image controller=${IMG}
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build config/default | kubectl apply -f -
-# restore kustomization.yaml
-	cp ${CACHE}/kustomization-agent.yaml config/agent/kustomization.yaml
-	cp ${CACHE}/kustomization-manager.yaml config/manager/kustomization.yaml
+	kubectl apply -f deploy/epic-gateway.yaml
 
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
-	$(KUSTOMIZE) build config/default | kubectl delete -f -
+	kubectl delete -f deploy/epic-gateway.yaml
 
 
 CONTROLLER_GEN = $(shell pwd)/bin/controller-gen

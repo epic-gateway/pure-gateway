@@ -18,6 +18,7 @@ testbin/*
 
 !vendor/**/zz_generated.*
 config/rbac/role.yaml
+deploy/*.yaml
 
 # editor and IDE paraphernalia
 .idea
