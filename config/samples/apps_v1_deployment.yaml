@@ -15,3 +15,10 @@ spec:
       containers:
       - image: purelb/kuard-amd64:blue
         name: kuard
+      topologySpreadConstraints:
+      - topologyKey: kubernetes.io/hostname
+        maxSkew: 1
+        labelSelector:
+          matchLabels:
+            app: sample
+        whenUnsatisfiable: ScheduleAnyway
