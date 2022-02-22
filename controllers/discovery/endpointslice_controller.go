@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 
+	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -17,6 +18,7 @@ import (
 
 	puregwv1 "acnodal.io/puregw/apis/puregw/v1"
 	"acnodal.io/puregw/controllers"
+	"acnodal.io/puregw/internal/acnodal"
 )
 
 // EndpointSliceReconciler reconciles a EndpointSlice object
@@ -103,9 +105,50 @@ func (r *EndpointSliceReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	// Update slice
-	l.Info("FIXME: Update slice", "slice", link)
+	configName, err := controllers.SplitNSName(slice.Annotations[puregwv1.EPICConfigAnnotation])
+	if err != nil {
+		return controllers.Done, err
+	}
+	epic, err := controllers.ConnectToEPIC(ctx, r.Client, &configName.Namespace, configName.Name)
+	if err != nil {
+		return controllers.Done, err
+	}
 
-	return ctrl.Result{}, nil
+	// Build the map of node addresses
+	nodeAddrs := map[string]string{}
+	for _, ep := range slice.Endpoints {
+		node := corev1.Node{}
+		nodeName := types.NamespacedName{Namespace: "", Name: *ep.NodeName}
+		err := r.Get(ctx, nodeName, &node)
+		if err != nil {
+			return controllers.Done, err
+		}
+		for _, addr := range node.Status.Addresses {
+			if addr.Type == corev1.NodeInternalIP {
+				nodeAddrs[*ep.NodeName] = addr.Address
+			}
+		}
+	}
+
+	spec := acnodal.SliceSpec{
+		ClientRef: acnodal.ClientRef{
+			ClusterID: "puregw", // FIXME:
+			Namespace: slice.Namespace,
+			Name:      slice.Name,
+			UID:       string(slice.UID),
+		},
+		ParentRef: acnodal.ClientRef{
+			ClusterID: "puregw", // FIXME:
+			Namespace: slice.Namespace,
+			Name:      slice.ObjectMeta.OwnerReferences[0].Name,
+			UID:       string(slice.ObjectMeta.OwnerReferences[0].UID),
+		},
+		EndpointSlice: slice,
+		NodeAddresses: nodeAddrs,
+	}
+
+	_, err = epic.UpdateSlice(link, spec)
+	return controllers.Done, err
 }
 
 // addEpicSliceLink adds an EPICLinkAnnotation annotation to slice.
