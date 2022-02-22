@@ -1,0 +1,149 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.7.0
+  creationTimestamp: null
+  name: endpointsliceshadows.puregw.acnodal.io
+spec:
+  group: puregw.acnodal.io
+  names:
+    kind: EndpointSliceShadow
+    listKind: EndpointSliceShadowList
+    plural: endpointsliceshadows
+    shortNames:
+    - epshadow
+    - epshadows
+    singular: endpointsliceshadow
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.epicConfigName
+      name: Config Name
+      type: string
+    - jsonPath: .spec.epicLink
+      name: EPIC Link
+      type: string
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: "EndpointSliceShadow is a kludge because of a difference in the
+          way that EndpointSlice works compared to basically every other k8s object.
+          When you scale a service down to zero endpoints the EndpointSlice controller
+          BLOWS AWAY THE SLICE ANNOTATIONS AND FINALIZERS. This is incredibly hostile,
+          but when I opened an issue the devs doubled down and indicated that this
+          was as intended. \n Since we can't mark the EndpointSlice in the usual way
+          we have this \"shadow\" resource that holds the extra data that we need."
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: EndpointSliceShadowSpec defines the desired state of EndpointSliceShadow
+            properties:
+              epicConfigName:
+                description: EPICConfigName is the name of the GatewayClassConfig
+                  that was used to announce this slice to EPIC.
+                type: string
+              epicLink:
+                description: EPICLink is this slice's URL on the EPIC system.
+                type: string
+              parentRoutes:
+                description: ParentRoutes provides an efficient way to link back to
+                  the HTTPRoutes that reference this slice.
+                items:
+                  description: "ParentRef identifies an API object (usually a Gateway)
+                    that can be considered a parent of this resource (usually a route).
+                    The only kind of parent resource with \"Core\" support is Gateway.
+                    This API may be extended in the future to support additional kinds
+                    of parent resources, such as HTTPRoute. \n The API object must
+                    be valid in the cluster; the Group and Kind must be registered
+                    in the cluster for this reference to be valid. \n References to
+                    objects with invalid Group and Kind are not valid, and must be
+                    rejected by the implementation, with appropriate Conditions set
+                    on the containing object."
+                  properties:
+                    group:
+                      default: gateway.networking.k8s.io
+                      description: "Group is the group of the referent. \n Support:
+                        Core"
+                      maxLength: 253
+                      pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                      type: string
+                    kind:
+                      default: Gateway
+                      description: "Kind is kind of the referent. \n Support: Core
+                        (Gateway) Support: Custom (Other Resources)"
+                      maxLength: 63
+                      minLength: 1
+                      pattern: ^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$
+                      type: string
+                    name:
+                      description: "Name is the name of the referent. \n Support:
+                        Core"
+                      maxLength: 253
+                      minLength: 1
+                      type: string
+                    namespace:
+                      description: "Namespace is the namespace of the referent. When
+                        unspecified (or empty string), this refers to the local namespace
+                        of the Route. \n Support: Core"
+                      maxLength: 63
+                      minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                    sectionName:
+                      description: "SectionName is the name of a section within the
+                        target resource. In the following resources, SectionName is
+                        interpreted as the following: \n * Gateway: Listener Name
+                        \n Implementations MAY choose to support attaching Routes
+                        to other resources. If that is the case, they MUST clearly
+                        document how SectionName is interpreted. \n When unspecified
+                        (empty string), this will reference the entire resource. For
+                        the purpose of status, an attachment is considered successful
+                        if at least one section in the parent resource accepts it.
+                        For example, Gateway listeners can restrict which Routes can
+                        attach to them by Route kind, namespace, or hostname. If 1
+                        of 2 Gateway listeners accept attachment from the referencing
+                        Route, the Route MUST be considered successfully attached.
+                        If no Gateway listeners accept attachment from this Route,
+                        the Route MUST be considered detached from the Gateway. \n
+                        Support: Core"
+                      maxLength: 253
+                      minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+            required:
+            - epicConfigName
+            - epicLink
+            - parentRoutes
+            type: object
+          status:
+            description: EndpointSliceShadowStatus defines the observed state of EndpointSliceShadow
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

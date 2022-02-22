@@ -37,4 +37,12 @@ resources:
   group: gateway
   kind: HTTPRoute
   version: v1alpha2
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: acnodal.io
+  group: puregw
+  kind: EndpointSliceShadow
+  path: acnodal.io/puregw/apis/puregw/v1
+  version: v1
 version: "3"

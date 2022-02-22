@@ -6,10 +6,10 @@ package discovery
 
 import (
 	"context"
-	"encoding/json"
 
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -37,75 +37,29 @@ func (r *EndpointSliceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 //+kubebuilder:rbac:groups=discovery.k8s.io,resources=endpointslices,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=discovery.k8s.io,resources=endpointslices/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=discovery.k8s.io,resources=endpointslices/finalizers,verbs=update
+//+kubebuilder:rbac:groups=puregw.acnodal.io,resources=endpointsliceshadows,verbs=get;list;watch;delete
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the EndpointSlice object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
+// Reconcile updates EPIC with the current EndpointSlice contents.
 func (r *EndpointSliceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := log.FromContext(ctx)
 	const (
 		finalizerName = "epic.acnodal.io/controller"
 	)
 
-	// Get the Slice that caused this request
-	slice := discoveryv1.EndpointSlice{}
-	if err := r.Get(ctx, req.NamespacedName, &slice); err != nil {
-		l.Info("Can't get Slice, probably deleted", "name", req.NamespacedName)
-
-		// ignore not-found errors, since they can't be fixed by an
-		// immediate requeue (we'll need to wait for a new notification),
-		// and we can get them on deleted requests.
+	// See if the HTTPRoute controller has announced this slice. The
+	// route can tell whether we're interesting to EPIC or not, but we
+	// can't. This logic is a little backward - we usually get the
+	// object that caused the event first, but in this case we need the
+	// shadow to update and to clean up.
+	shadow := puregwv1.EndpointSliceShadow{}
+	sliceName := types.NamespacedName{Namespace: req.Namespace, Name: req.Name}
+	if err := r.Get(ctx, sliceName, &shadow); err != nil {
+		l.Info("Not announced, will ignore")
 		return controllers.Done, client.IgnoreNotFound(err)
 	}
 
-	// See if the HTTPRoute controller has announced this slice. It has
-	// enough data to be able to tell whether we're interesting to EPIC
-	// or not, but we don't.
-	link, announced := slice.Annotations[puregwv1.EPICLinkAnnotation]
-	if !announced {
-		// We don't know if this belongs to a service that we care about
-		return controllers.Done, nil
-	}
-
-	// Clean up if this resource is marked for deletion.
-	if !slice.ObjectMeta.DeletionTimestamp.IsZero() {
-		l.Info("Cleaning up")
-
-		// Remove our finalizer to ensure that we don't block the resource
-		// from being deleted.
-		if err := controllers.RemoveFinalizer(ctx, r.Client, &slice, finalizerName); err != nil {
-			l.Error(err, "Removing finalizer")
-			// Fall through to delete the EPIC resource
-		}
-
-		// Delete the EPIC resource.
-		configName, err := controllers.SplitNSName(slice.Annotations[puregwv1.EPICConfigAnnotation])
-		if err != nil {
-			return controllers.Done, err
-		}
-		epic, err := controllers.ConnectToEPIC(ctx, r.Client, &configName.Namespace, configName.Name)
-		if err != nil {
-			return controllers.Done, err
-		}
-		return controllers.Done, epic.Delete(link)
-	}
-
-	l.Info("Reconciling")
-
-	// The resource is not being deleted, and it's interesting to EPIC,
-	// so add our finalizer.
-	if err := controllers.AddFinalizer(ctx, r.Client, &slice, finalizerName); err != nil {
-		return controllers.Done, err
-	}
-
-	// Update slice
-	configName, err := controllers.SplitNSName(slice.Annotations[puregwv1.EPICConfigAnnotation])
+	// Connect to EPIC using the info in the shadow.
+	configName, err := controllers.SplitNSName(shadow.Spec.EPICConfigName)
 	if err != nil {
 		return controllers.Done, err
 	}
@@ -113,6 +67,29 @@ func (r *EndpointSliceReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if err != nil {
 		return controllers.Done, err
 	}
+
+	// Get the Slice that caused this request
+	slice := discoveryv1.EndpointSlice{}
+	if err := r.Get(ctx, req.NamespacedName, &slice); err != nil {
+		if apierrors.IsNotFound(err) {
+			l.Info("Slice deleted, will clean up")
+
+			// Delete the EPIC-side resource.
+			if err := epic.Delete(shadow.Spec.EPICLink); err != nil {
+				return controllers.Done, err
+			}
+
+			// Delete the shadow.
+			return controllers.Done, r.Delete(ctx, &shadow)
+		}
+
+		return controllers.Done, err
+	}
+
+	l.Info("Reconciling")
+
+	// The resource is not being deleted, and it's interesting to
+	// EPIC. It changed so update its EPIC-side resource.
 
 	// Build the map of node addresses
 	nodeAddrs := map[string]string{}
@@ -147,42 +124,12 @@ func (r *EndpointSliceReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		NodeAddresses: nodeAddrs,
 	}
 
-	_, err = epic.UpdateSlice(link, spec)
+	// Fix the null endpoints if the service has no replicas. Null
+	// endpoints will cause the announcement to fail.
+	if spec.EndpointSlice.Endpoints == nil {
+		spec.EndpointSlice.Endpoints = []discoveryv1.Endpoint{}
+	}
+
+	_, err = epic.UpdateSlice(shadow.Spec.EPICLink, spec)
 	return controllers.Done, err
-}
-
-// addEpicSliceLink adds an EPICLinkAnnotation annotation to slice.
-func addEpicSliceLink(ctx context.Context, cl client.Client, slice *discoveryv1.EndpointSlice, link string) error {
-	var (
-		patch      []map[string]interface{}
-		patchBytes []byte
-		err        error
-	)
-
-	if slice.Annotations == nil {
-		// If this is the first annotation then we need to wrap it in an
-		// object
-		patch = []map[string]interface{}{{
-			"op":    "add",
-			"path":  "/metadata/annotations",
-			"value": map[string]string{puregwv1.EPICLinkAnnotation: link},
-		}}
-	} else {
-		// If there are other annotations then we can just add this one
-		patch = []map[string]interface{}{{
-			"op":    "add",
-			"path":  puregwv1.EPICLinkAnnotationPatch,
-			"value": link,
-		}}
-	}
-
-	// apply the patch
-	if patchBytes, err = json.Marshal(patch); err != nil {
-		return err
-	}
-	if err := cl.Patch(ctx, slice, client.RawPatch(types.JSONPatchType, patchBytes)); err != nil {
-		return err
-	}
-
-	return nil
 }

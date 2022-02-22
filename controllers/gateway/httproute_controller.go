@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -43,6 +44,7 @@ func (r *HTTPRouteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 //+kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch
 //+kubebuilder:rbac:groups=discovery.k8s.io,resources=endpointslices,verbs=get;list;watch
 //+kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
+//+kubebuilder:rbac:groups=puregw.acnodal.io,resources=endpointsliceshadows,verbs=get;list;watch;create;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -114,7 +116,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return controllers.TryAgain, nil
 	}
 
-	// See if we're the chose controller
+	// See if we're the chosen controller
 	config, err := getEPICConfig(ctx, r.Client, string(gw.Spec.GatewayClassName))
 	if err != nil {
 		return controllers.Done, err
@@ -181,11 +183,9 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				if ref.Namespace != nil {
 					svcName.Namespace = string(*ref.Namespace)
 				}
-				err := r.Get(ctx, svcName, &svc)
-				if err != nil {
-					return controllers.Done, err
+				if err := r.Get(ctx, svcName, &svc); err == nil {
+					route.Spec.Rules[i].BackendRefs[j].Name = gatewayv1a2.ObjectName(svc.UID)
 				}
-				route.Spec.Rules[i].BackendRefs[j].Name = gatewayv1a2.ObjectName(svc.UID)
 			}
 		}
 
@@ -217,6 +217,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return controllers.Done, err
 	}
 	if incomplete {
+		l.Info("Incomplete info, will back off and retry")
 		return controllers.TryAgain, nil
 	}
 	l.Info("Referenced slices", "slices", slices)
@@ -224,8 +225,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	for _, slice := range slices {
 		// If this slice has been announced then we don't need to do it
 		// again.
-		link, announced := slice.Annotations[puregwv1.EPICLinkAnnotation]
-		if announced {
+		if hasBeen, _ := hasBeenAnnounced(ctx, r.Client, slice); hasBeen {
 			l.Info("Previously announced", "slice", slice.Name, "epic-link", link)
 			continue
 		}
@@ -264,6 +264,12 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			NodeAddresses: nodeAddrs,
 		}
 
+		// Fix the null endpoints if the service has no replicas. Null
+		// endpoints will cause the announcement to fail.
+		if spec.EndpointSlice.Endpoints == nil {
+			spec.EndpointSlice.Endpoints = []discoveryv1.Endpoint{}
+		}
+
 		sliceResp, err := epic.AnnounceSlice(account.Links["create-slice"], spec)
 		if err != nil {
 			l.Error(err, "announcing slice")
@@ -271,7 +277,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 
 		// Annotate the Slice to mark it as "announced".
-		if err := addSliceEpicLink(ctx, r.Client, slice, sliceResp.Links["self"], config.NamespacedName().String()); err != nil {
+		if err := addSliceEpicLink(ctx, r.Client, slice, sliceResp.Links["self"], config.NamespacedName().String(), &route); err != nil {
 			l.Error(err, "adding EPIC link to slice")
 			continue
 		}
@@ -318,10 +324,10 @@ func referencedSlices(ctx context.Context, cl client.Client, route *gatewayv1a2.
 				// to back off and retry.
 				if apierrors.IsNotFound(err) {
 					incomplete = true
+				} else {
+					// If it's some other sort of error then tell the controller.
+					return
 				}
-
-				// If it's some other sort of error then tell the controller.
-				return
 			}
 
 			// Get the slices that belong to this service.
@@ -392,47 +398,35 @@ func addEpicLink(ctx context.Context, cl client.Client, route *gatewayv1a2.HTTPR
 }
 
 // addEpicLink adds an EPICLinkAnnotation annotation to the Route.
-func addSliceEpicLink(ctx context.Context, cl client.Client, slice *discoveryv1.EndpointSlice, link string, configName string) error {
-	var (
-		patch      []map[string]interface{}
-		patchBytes []byte
-		err        error
-	)
+func addSliceEpicLink(ctx context.Context, cl client.Client, slice *discoveryv1.EndpointSlice, link string, configName string, route *gatewayv1a2.HTTPRoute) error {
+	kind := gatewayv1a2.Kind("HTTPRoute")
+	ns := gatewayv1a2.Namespace(route.Namespace)
+	name := gatewayv1a2.ObjectName(route.Name)
 
-	if slice.Annotations == nil {
-		// If this is the first annotation then we need to wrap it in an
-		// object
-		patch = []map[string]interface{}{{
-			"op":   "add",
-			"path": "/metadata/annotations",
-			"value": map[string]string{
-				puregwv1.EPICLinkAnnotation:   link,
-				puregwv1.EPICConfigAnnotation: configName,
-			},
-		}}
-	} else {
-		// If there are other annotations then we can just add this one
-		patch = []map[string]interface{}{
-			{
-				"op":    "add",
-				"path":  puregwv1.EPICLinkAnnotationPatch,
-				"value": link,
-			},
-			{
-				"op":    "add",
-				"path":  puregwv1.EPICConfigAnnotationPatch,
-				"value": configName,
-			},
-		}
+	shadow := puregwv1.EndpointSliceShadow{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      slice.Name,
+			Namespace: slice.Namespace,
+		},
+		Spec: puregwv1.EndpointSliceShadowSpec{
+			EPICConfigName: configName,
+			EPICLink:       link,
+			ParentRoutes: []gatewayv1a2.ParentRef{{
+				Kind:      &kind,
+				Namespace: &ns,
+				Name:      name,
+			}},
+		},
 	}
 
-	// apply the patch
-	if patchBytes, err = json.Marshal(patch); err != nil {
-		return err
-	}
-	if err := cl.Patch(ctx, slice, client.RawPatch(types.JSONPatchType, patchBytes)); err != nil {
-		return err
-	}
+	return cl.Create(ctx, &shadow)
+}
 
-	return nil
+func hasBeenAnnounced(ctx context.Context, cl client.Client, slice *discoveryv1.EndpointSlice) (bool, error) {
+	shadow := puregwv1.EndpointSliceShadow{}
+	name := types.NamespacedName{Namespace: slice.Namespace, Name: slice.Name}
+	if err := cl.Get(ctx, name, &shadow); err != nil {
+		return false, err
+	}
+	return true, nil
 }

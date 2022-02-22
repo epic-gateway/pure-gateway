@@ -1,0 +1,24 @@
+# permissions for end users to edit endpointsliceshadows.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: endpointsliceshadow-editor-role
+rules:
+- apiGroups:
+  - puregw.acnodal.io
+  resources:
+  - endpointsliceshadows
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - puregw.acnodal.io
+  resources:
+  - endpointsliceshadows/status
+  verbs:
+  - get
