@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	puregwv1 "acnodal.io/puregw/apis/puregw/v1"
+	epicgwv1 "acnodal.io/puregw/apis/puregw/v1"
 	"acnodal.io/puregw/controllers"
 	"acnodal.io/puregw/internal/acnodal"
 )
@@ -51,7 +51,7 @@ func (r *EndpointSliceReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// can't. This logic is a little backward - we usually get the
 	// object that caused the event first, but in this case we need the
 	// shadow to update and to clean up.
-	shadow := puregwv1.EndpointSliceShadow{}
+	shadow := epicgwv1.EndpointSliceShadow{}
 	sliceName := types.NamespacedName{Namespace: req.Namespace, Name: req.Name}
 	if err := r.Get(ctx, sliceName, &shadow); err != nil {
 		l.Info("Not announced, will ignore")

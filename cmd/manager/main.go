@@ -21,7 +21,7 @@ import (
 
 	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	puregwv1 "acnodal.io/puregw/apis/puregw/v1"
+	epicgwv1 "acnodal.io/puregw/apis/puregw/v1"
 	discoverycontrollers "acnodal.io/puregw/controllers/discovery"
 	gatewaycontrollers "acnodal.io/puregw/controllers/gateway"
 	//+kubebuilder:scaffold:imports
@@ -35,7 +35,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(gatewayv1a2.AddToScheme(scheme))
-	utilruntime.Must(puregwv1.AddToScheme(scheme))
+	utilruntime.Must(epicgwv1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 

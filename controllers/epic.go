@@ -8,7 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	puregwv1 "acnodal.io/puregw/apis/puregw/v1"
+	epicgwv1 "acnodal.io/puregw/apis/puregw/v1"
 	"acnodal.io/puregw/internal/acnodal"
 )
 
@@ -18,7 +18,7 @@ func ConnectToEPIC(ctx context.Context, cl client.Client, namespace *string, nam
 	if namespace != nil {
 		gwcName.Namespace = *namespace
 	}
-	gcc := puregwv1.GatewayClassConfig{}
+	gcc := epicgwv1.GatewayClassConfig{}
 	if err := cl.Get(ctx, gwcName, &gcc); err != nil {
 		return nil, fmt.Errorf("Unable to get GatewayClassConfig %s", gwcName.String())
 	}

@@ -14,7 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	puregwv1 "acnodal.io/puregw/apis/puregw/v1"
+	epicgwv1 "acnodal.io/puregw/apis/puregw/v1"
 	"acnodal.io/puregw/controllers"
 	ti "acnodal.io/puregw/internal/trueingress"
 )
@@ -28,7 +28,7 @@ type GatewayClassConfigAgentReconciler struct {
 // SetupWithManager sets up the controller with the Manager.
 func (r *GatewayClassConfigAgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&puregwv1.GatewayClassConfig{}).
+		For(&epicgwv1.GatewayClassConfig{}).
 		Complete(r)
 }
 
@@ -52,7 +52,7 @@ func (r *GatewayClassConfigAgentReconciler) Reconcile(ctx context.Context, req c
 	)
 
 	// Get the config that caused this request
-	gwc := puregwv1.GatewayClassConfig{}
+	gwc := epicgwv1.GatewayClassConfig{}
 	if err := r.Get(ctx, req.NamespacedName, &gwc); err != nil {
 		// ignore not-found errors, since they can't be fixed by an
 		// immediate requeue (we'll need to wait for a new notification),

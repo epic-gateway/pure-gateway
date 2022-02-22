@@ -20,7 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	puregwv1 "acnodal.io/puregw/apis/puregw/v1"
+	epicgwv1 "acnodal.io/puregw/apis/puregw/v1"
 	"acnodal.io/puregw/controllers"
 	"acnodal.io/puregw/internal/acnodal"
 )
@@ -84,10 +84,10 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 
 		// Delete the EPIC resources
-		link, announced := route.Annotations[puregwv1.EPICLinkAnnotation]
+		link, announced := route.Annotations[epicgwv1.EPICLinkAnnotation]
 		if announced {
 			// Get cached config name
-			configName, err := controllers.SplitNSName(route.Annotations[puregwv1.EPICConfigAnnotation])
+			configName, err := controllers.SplitNSName(route.Annotations[epicgwv1.EPICConfigAnnotation])
 			if err != nil {
 				return controllers.Done, err
 			}
@@ -149,7 +149,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// See if we've already announced this Route
-	link, announced := route.Annotations[puregwv1.EPICLinkAnnotation]
+	link, announced := route.Annotations[epicgwv1.EPICLinkAnnotation]
 	if announced {
 		l.Info("Previously announced", "link", link)
 	} else {
@@ -208,7 +208,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		if err := addEpicLink(ctx, r.Client, &route, routeResp.Links["self"], config.NamespacedName().String()); err != nil {
 			return controllers.Done, err
 		}
-		l.Info("Announced", "epic-link", route.Annotations[puregwv1.EPICLinkAnnotation])
+		l.Info("Announced", "epic-link", route.Annotations[epicgwv1.EPICLinkAnnotation])
 	}
 
 	// Announce the EndpointSlices that the Route references
@@ -281,7 +281,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			l.Error(err, "adding EPIC link to slice")
 			continue
 		}
-		l.Info("Slice announced", "epic-link", slice.Annotations[puregwv1.EPICLinkAnnotation])
+		l.Info("Slice announced", "epic-link", slice.Annotations[epicgwv1.EPICLinkAnnotation])
 	}
 
 	return controllers.Done, nil
@@ -366,8 +366,8 @@ func addEpicLink(ctx context.Context, cl client.Client, route *gatewayv1a2.HTTPR
 			"op":   "add",
 			"path": "/metadata/annotations",
 			"value": map[string]string{
-				puregwv1.EPICLinkAnnotation:   link,
-				puregwv1.EPICConfigAnnotation: configName,
+				epicgwv1.EPICLinkAnnotation:   link,
+				epicgwv1.EPICConfigAnnotation: configName,
 			},
 		}}
 	} else {
@@ -375,12 +375,12 @@ func addEpicLink(ctx context.Context, cl client.Client, route *gatewayv1a2.HTTPR
 		patch = []map[string]interface{}{
 			{
 				"op":    "add",
-				"path":  puregwv1.EPICLinkAnnotationPatch,
+				"path":  epicgwv1.EPICLinkAnnotationPatch,
 				"value": link,
 			},
 			{
 				"op":    "add",
-				"path":  puregwv1.EPICConfigAnnotationPatch,
+				"path":  epicgwv1.EPICConfigAnnotationPatch,
 				"value": configName,
 			},
 		}
@@ -403,12 +403,12 @@ func addSliceEpicLink(ctx context.Context, cl client.Client, slice *discoveryv1.
 	ns := gatewayv1a2.Namespace(route.Namespace)
 	name := gatewayv1a2.ObjectName(route.Name)
 
-	shadow := puregwv1.EndpointSliceShadow{
+	shadow := epicgwv1.EndpointSliceShadow{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      slice.Name,
 			Namespace: slice.Namespace,
 		},
-		Spec: puregwv1.EndpointSliceShadowSpec{
+		Spec: epicgwv1.EndpointSliceShadowSpec{
 			EPICConfigName: configName,
 			EPICLink:       link,
 			ParentRoutes: []gatewayv1a2.ParentRef{{
@@ -423,7 +423,7 @@ func addSliceEpicLink(ctx context.Context, cl client.Client, slice *discoveryv1.
 }
 
 func hasBeenAnnounced(ctx context.Context, cl client.Client, slice *discoveryv1.EndpointSlice) (bool, error) {
-	shadow := puregwv1.EndpointSliceShadow{}
+	shadow := epicgwv1.EndpointSliceShadow{}
 	name := types.NamespacedName{Namespace: slice.Namespace, Name: slice.Name}
 	if err := cl.Get(ctx, name, &shadow); err != nil {
 		return false, err

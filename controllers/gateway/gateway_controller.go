@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	puregwv1 "acnodal.io/puregw/apis/puregw/v1"
+	epicgwv1 "acnodal.io/puregw/apis/puregw/v1"
 	"acnodal.io/puregw/controllers"
 )
 
@@ -89,7 +89,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 
 		// Delete the EPIC resource
-		link, announced := gw.Annotations[puregwv1.EPICLinkAnnotation]
+		link, announced := gw.Annotations[epicgwv1.EPICLinkAnnotation]
 		if announced {
 			err = epic.Delete(link)
 			if err != nil {
@@ -101,7 +101,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// See if we've already announced this resource.
-	link, announced := gw.Annotations[puregwv1.EPICLinkAnnotation]
+	link, announced := gw.Annotations[epicgwv1.EPICLinkAnnotation]
 	if announced {
 		l.Info("Previously announced", "link", link)
 		return controllers.Done, nil
@@ -136,7 +136,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	return controllers.Done, nil
 }
 
-func getEPICConfig(ctx context.Context, cl client.Client, gatewayClassName string) (*puregwv1.GatewayClassConfig, error) {
+func getEPICConfig(ctx context.Context, cl client.Client, gatewayClassName string) (*epicgwv1.GatewayClassConfig, error) {
 	// Get the owning GatewayClass
 	gc := gatewayv1a2.GatewayClass{}
 	if err := cl.Get(ctx, types.NamespacedName{Name: gatewayClassName}, &gc); err != nil {
@@ -153,7 +153,7 @@ func getEPICConfig(ctx context.Context, cl client.Client, gatewayClassName strin
 	if gc.Spec.ParametersRef.Namespace != nil {
 		gwcName.Namespace = string(*gc.Spec.ParametersRef.Namespace)
 	}
-	gwc := puregwv1.GatewayClassConfig{}
+	gwc := epicgwv1.GatewayClassConfig{}
 	if err := cl.Get(ctx, gwcName, &gwc); err != nil {
 		return nil, fmt.Errorf("Unable to get GatewayClassConfig %s", gc.Spec.ParametersRef.Name)
 	}
@@ -176,8 +176,8 @@ func (r *GatewayReconciler) addEpicLink(ctx context.Context, gw *gatewayv1a2.Gat
 			"op":   "add",
 			"path": "/metadata/annotations",
 			"value": map[string]string{
-				puregwv1.EPICLinkAnnotation:   link,
-				puregwv1.EPICConfigAnnotation: configName,
+				epicgwv1.EPICLinkAnnotation:   link,
+				epicgwv1.EPICConfigAnnotation: configName,
 			},
 		}}
 	} else {
@@ -185,12 +185,12 @@ func (r *GatewayReconciler) addEpicLink(ctx context.Context, gw *gatewayv1a2.Gat
 		patch = []map[string]interface{}{
 			{
 				"op":    "add",
-				"path":  puregwv1.EPICLinkAnnotationPatch,
+				"path":  epicgwv1.EPICLinkAnnotationPatch,
 				"value": link,
 			},
 			{
 				"op":    "add",
-				"path":  puregwv1.EPICConfigAnnotationPatch,
+				"path":  epicgwv1.EPICConfigAnnotationPatch,
 				"value": configName,
 			},
 		}

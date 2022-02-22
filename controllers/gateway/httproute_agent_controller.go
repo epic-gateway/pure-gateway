@@ -19,7 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	puregwv1 "acnodal.io/puregw/apis/puregw/v1"
+	epicgwv1 "acnodal.io/puregw/apis/puregw/v1"
 	"acnodal.io/puregw/controllers"
 	"acnodal.io/puregw/internal/acnodal"
 	ti "acnodal.io/puregw/internal/trueingress"
@@ -133,11 +133,11 @@ func (r *HTTPRouteAgentReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	return controllers.Done, nil
 }
 
-func setupTunnels(l logr.Logger, gw *gatewayv1a2.Gateway, spec puregwv1.TrueIngress, slices []*discoveryv1.EndpointSlice, epic acnodal.EPIC) (incomplete bool, err error) {
+func setupTunnels(l logr.Logger, gw *gatewayv1a2.Gateway, spec epicgwv1.TrueIngress, slices []*discoveryv1.EndpointSlice, epic acnodal.EPIC) (incomplete bool, err error) {
 	// Get the service that owns this endpoint. This endpoint
 	// will either re-use an existing tunnel or set up a new one
 	// for this node. Tunnels belong to the service.
-	svcResponse, err := epic.FetchGateway(gw.Annotations[puregwv1.EPICLinkAnnotation])
+	svcResponse, err := epic.FetchGateway(gw.Annotations[epicgwv1.EPICLinkAnnotation])
 	if err != nil {
 		return false, fmt.Errorf("service not found")
 	}
@@ -179,7 +179,7 @@ func setupTunnels(l logr.Logger, gw *gatewayv1a2.Gateway, spec puregwv1.TrueIngr
 
 // setupTunnel sets up the Acnodal PFC components and GUE tunnel to
 // communicate with the Acnodal EPIC.
-func setupTunnel(l logr.Logger, spec puregwv1.TrueIngress, clientAddress string, epicEndpoint acnodal.TunnelEndpoint, tunnelAuth string) error {
+func setupTunnel(l logr.Logger, spec epicgwv1.TrueIngress, clientAddress string, epicEndpoint acnodal.TunnelEndpoint, tunnelAuth string) error {
 	// Determine the interface to which to attach the Encap PFC
 	encapIntf, err := interfaceOrDefault(spec.EncapAttachment.Interface, clientAddress)
 	if err != nil {
