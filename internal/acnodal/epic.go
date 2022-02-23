@@ -31,6 +31,7 @@ type EPIC interface {
 	AnnounceGateway(url string, gateway gatewayv1a2.Gateway) (GatewayResponse, error)
 	FetchGateway(url string) (GatewayResponse, error)
 	Delete(svcUrl string) error
+	FetchSlice(url string) (*SliceResponse, error)
 	AnnounceSlice(url string, slice SliceSpec) (*SliceResponse, error)
 	UpdateSlice(url string, slice SliceSpec) (*SliceResponse, error)
 	AnnounceRoute(url string, spec RouteSpec) (*RouteResponse, error)
