@@ -173,7 +173,7 @@ func TestRouteAnnouncements(t *testing.T) {
 		},
 		HTTP: gatewayv1a2.HTTPRouteSpec{Hostnames: []gatewayv1a2.Hostname{"test-host", "other-host"}},
 	}
-	rt, err := e.AnnounceRoute(a.Links["create-route"], "test-route", route)
+	rt, err := e.AnnounceRoute(a.Links["create-route"], route)
 	if err != nil {
 		t.Errorf("got error %+v", err)
 	}

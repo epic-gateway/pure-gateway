@@ -60,6 +60,10 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	const (
 		finalizerName = "epic.acnodal.io/controller"
 	)
+	var (
+		missingService bool = false
+		missingParent  bool = false
+	)
 
 	// Get the HTTPRoute that triggered this request
 	route := gatewayv1a2.HTTPRoute{}
@@ -83,56 +87,44 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			// Fall through to delete the EPIC resource
 		}
 
-		// Delete the EPIC resources
-		link, announced := route.Annotations[epicgwv1.EPICLinkAnnotation]
-		if announced {
-			// Get cached config name
-			configName, err := controllers.SplitNSName(route.Annotations[epicgwv1.EPICConfigAnnotation])
-			if err != nil {
-				return controllers.Done, err
-			}
-			epic, err := controllers.ConnectToEPIC(ctx, r.Client, &configName.Namespace, configName.Name)
-			if err != nil {
-				return controllers.Done, err
-			}
-			err = epic.Delete(link)
-			if err != nil {
-				return controllers.Done, err
-			}
-
-			// FIXME: clean up slices. Need to delete the slices that are
-			// referenced only by this route
+		// Delete the EPIC resource if it was announced.
+		if err := maybeDelete(ctx, r.Client, &route); err != nil {
+			return controllers.Done, err
 		}
 
+		// FIXME: clean up slices. Need to delete the slices that are
+		// referenced only by this route
+
 		return controllers.Done, nil
 	}
 
-	// Try to get the Gateway to which we refer, and keep trying until
-	// we can
-	gw := gatewayv1a2.Gateway{}
-	// FIXME: need to handle multiple parents
-	if err := parentGW(ctx, r.Client, route.Spec.ParentRefs[0], &gw); err != nil {
-		l.Info("Can't get parent, will retry", "parentRef", route.Spec.ParentRefs[0])
-		return controllers.TryAgain, nil
-	}
+	// Try to get the Gateways to which we refer, and keep trying until
+	// we can. If any of the parents is not our GatewayClass then we
+	// won't handle this route.
+	var config *epicgwv1.GatewayClassConfig
+	for _, parent := range route.Spec.ParentRefs {
+		gw := gatewayv1a2.Gateway{}
+		// FIXME: need to handle multiple parents
+		if err := parentGW(ctx, r.Client, parent, &gw); err != nil {
+			l.Info("Can't get parent, will retry", "parentRef", parent)
+			return controllers.TryAgain, nil
+		}
 
-	// See if we're the chosen controller
-	config, err := getEPICConfig(ctx, r.Client, string(gw.Spec.GatewayClassName))
-	if err != nil {
-		return controllers.Done, err
-	}
-	if config == nil {
-		l.Info("Not our ControllerName, will ignore")
-		return controllers.Done, nil
+		// See if we're the chosen controller
+		var err error
+		config, err = getEPICConfig(ctx, r.Client, string(gw.Spec.GatewayClassName))
+		if err != nil {
+			return controllers.Done, err
+		}
+		if config == nil {
+			l.Info("Not our ControllerName, will ignore", "parentRef", parent, "controller", gw.Spec.GatewayClassName)
+			return controllers.Done, nil
+		}
 	}
 
 	epic, err := controllers.ConnectToEPIC(ctx, r.Client, &config.Namespace, config.Name)
 	if err != nil {
 		return controllers.Done, err
-	}
-	if epic == nil {
-		l.Info("Not our ControllerName, will ignore")
-		return controllers.Done, nil
 	}
 
 	l.Info("Reconciling")
@@ -148,70 +140,116 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return controllers.Done, err
 	}
 
-	// See if we've already announced this Route
-	link, announced := route.Annotations[epicgwv1.EPICLinkAnnotation]
-	if announced {
-		l.Info("Previously announced", "link", link)
-	} else {
+	// Prepare the route to be sent to EPIC
+	announcedRoute := route.DeepCopy()
 
-		// Announce the route.
-
-		// Munge the ParentRefs so they refer to the Gateways' UIDs, not
-		// their names. We use UIDs on the EPIC side because they're unique.
-		for i, parent := range route.Spec.ParentRefs {
-			gw := gatewayv1a2.Gateway{}
-			gwName := types.NamespacedName{Namespace: "default", Name: string(parent.Name)}
-			if parent.Namespace != nil {
-				gwName.Namespace = string(*parent.Namespace)
-			}
-			if err := r.Get(ctx, gwName, &gw); err != nil {
-				l.Error(err, "getting parent")
-				// If we can't find the parent we'll need to keep retrying until
-				// we can.
-				return controllers.TryAgain, nil
-			}
-			route.Spec.ParentRefs[i].Name = gatewayv1a2.ObjectName(gw.UID)
+	// Munge the ParentRefs so they refer to the Gateways' UIDs, not
+	// their names. We use UIDs on the EPIC side because they're unique.
+	for i, parent := range announcedRoute.Spec.ParentRefs {
+		gw := gatewayv1a2.Gateway{}
+		gwName := types.NamespacedName{Namespace: "default", Name: string(parent.Name)}
+		if parent.Namespace != nil {
+			gwName.Namespace = string(*parent.Namespace)
 		}
-
-		// Munge the ClientRefs so they refer to the services' UIDs, not
-		// their names. We use UIDs on the EPIC side because they're
-		// unique.
-		for i, rule := range route.Spec.Rules {
-			for j, ref := range rule.BackendRefs {
-				svc := corev1.Service{}
-				svcName := types.NamespacedName{Namespace: "default", Name: string(ref.Name)}
-				if ref.Namespace != nil {
-					svcName.Namespace = string(*ref.Namespace)
-				}
-				if err := r.Get(ctx, svcName, &svc); err == nil {
-					route.Spec.Rules[i].BackendRefs[j].Name = gatewayv1a2.ObjectName(svc.UID)
-				}
-			}
+		if err := r.Get(ctx, gwName, &gw); err != nil {
+			l.Info("Parent service not found", "service", gwName)
+			missingParent = true
+		} else {
+			announcedRoute.Spec.ParentRefs[i].Name = gatewayv1a2.ObjectName(gw.UID)
 		}
-
-		// Announce the Route.
-		routeResp, err := epic.AnnounceRoute(account.Links["create-route"], route.Name,
-			acnodal.RouteSpec{
-				ClientRef: acnodal.ClientRef{
-					ClusterID: "puregw", // FIXME:
-					Namespace: route.Namespace,
-					Name:      route.Name,
-					UID:       string(route.UID),
-				},
-				HTTP: route.Spec,
-			})
-		if err != nil {
-			return controllers.Done, err
-		}
-
-		// Annotate the Route to mark it as "announced".
-		if err := addEpicLink(ctx, r.Client, &route, routeResp.Links["self"], config.NamespacedName().String()); err != nil {
-			return controllers.Done, err
-		}
-		l.Info("Announced", "epic-link", route.Annotations[epicgwv1.EPICLinkAnnotation])
 	}
 
-	// Announce the EndpointSlices that the Route references
+	// Munge the ClientRefs so they refer to the services' UIDs, not
+	// their names. We use UIDs on the EPIC side because they're
+	// unique.
+	for i, rule := range announcedRoute.Spec.Rules {
+		for j, ref := range rule.BackendRefs {
+			svc := corev1.Service{}
+			svcName := types.NamespacedName{Namespace: "default", Name: string(ref.Name)}
+			if ref.Namespace != nil {
+				svcName.Namespace = string(*ref.Namespace)
+			}
+			if err := r.Get(ctx, svcName, &svc); err != nil {
+				l.Info("Referenced service not found", "service", svcName)
+				missingService = true
+			} else {
+				announcedRoute.Spec.Rules[i].BackendRefs[j].Name = gatewayv1a2.ObjectName(svc.UID)
+			}
+		}
+	}
+
+	// See if we've already announced this Route
+	if link, announced := route.Annotations[epicgwv1.EPICLinkAnnotation]; announced {
+
+		// The route has been announced, so we might need to either update
+		// it or delete it. If we've got complete info about the things to
+		// which this route links, then we can update it. If anything is
+		// missing then we delete the route, back off, and retry.
+		if missingParent || missingService {
+
+			// Delete the EPIC resource.
+			l.Info("Previously announced, withdrawing", "link", link)
+			if err := maybeDelete(ctx, r.Client, &route); err != nil {
+				return controllers.Done, err
+			}
+
+			// Remove EPIC annotations so we re-announce when everything is
+			// in place.
+			if err := removeEpicLink(ctx, r.Client, &route); err != nil {
+				return controllers.Done, err
+			}
+
+			// Keep retrying until we've got everything that we need to
+			// announce.
+			return controllers.TryAgain, nil
+		} else {
+			l.Info("Previously announced, will update", "link", link)
+			// Update the Route.
+			_, err := epic.UpdateRoute(link,
+				acnodal.RouteSpec{
+					ClientRef: acnodal.ClientRef{
+						ClusterID: "puregw", // FIXME:
+						Namespace: announcedRoute.Namespace,
+						Name:      announcedRoute.Name,
+						UID:       string(announcedRoute.UID),
+					},
+					HTTP: announcedRoute.Spec,
+				})
+			if err != nil {
+				return controllers.Done, err
+			}
+		}
+	} else {
+		// If any info is missing then we can't announce so back off and
+		// retry later.
+		if missingParent || missingService {
+			l.Info("Missing info, will back off and retry")
+			return controllers.TryAgain, nil
+		} else {
+			// We have a complete Route so we can announce it to EPIC.
+			routeResp, err := epic.AnnounceRoute(account.Links["create-route"],
+				acnodal.RouteSpec{
+					ClientRef: acnodal.ClientRef{
+						ClusterID: "puregw", // FIXME:
+						Namespace: announcedRoute.Namespace,
+						Name:      announcedRoute.Name,
+						UID:       string(announcedRoute.UID),
+					},
+					HTTP: announcedRoute.Spec,
+				})
+			if err != nil {
+				return controllers.Done, err
+			}
+
+			// Annotate the Route to mark it as "announced".
+			if err := addEpicLink(ctx, r.Client, &route, routeResp.Links["self"], config.NamespacedName().String()); err != nil {
+				return controllers.Done, err
+			}
+			l.Info("Announced", "epic-link", route.Annotations[epicgwv1.EPICLinkAnnotation])
+		}
+	}
+
+	// Get the set of EndpointSlices that this Route references.
 	slices, incomplete, err := referencedSlices(ctx, r.Client, &route)
 	if err != nil {
 		return controllers.Done, err
@@ -222,11 +260,13 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 	l.Info("Referenced slices", "slices", slices)
 
+	// Announce the EndpointSlices that the Route references.
 	for _, slice := range slices {
 		// If this slice has been announced then we don't need to do it
-		// again.
+		// again. We don't need to update slices - the slice controller
+		// will take care of that.
 		if hasBeen, _ := hasBeenAnnounced(ctx, r.Client, slice); hasBeen {
-			l.Info("Previously announced", "slice", slice.Name, "epic-link", link)
+			l.Info("Previously announced", "slice", slice.Name)
 			continue
 		}
 
@@ -351,7 +391,8 @@ func referencedSlices(ctx context.Context, cl client.Client, route *gatewayv1a2.
 	return
 }
 
-// addEpicLink adds an EPICLinkAnnotation annotation to the Route.
+// addEpicLink adds our annotations that indicate that the route has
+// been announced.
 func addEpicLink(ctx context.Context, cl client.Client, route *gatewayv1a2.HTTPRoute, link string, configName string) error {
 	var (
 		patch      []map[string]interface{}
@@ -397,7 +438,43 @@ func addEpicLink(ctx context.Context, cl client.Client, route *gatewayv1a2.HTTPR
 	return nil
 }
 
-// addEpicLink adds an EPICLinkAnnotation annotation to the Route.
+// removeEpicLink removes our annotations that indicate that the route
+// has been announced.
+func removeEpicLink(ctx context.Context, cl client.Client, route *gatewayv1a2.HTTPRoute) error {
+	var (
+		patch      []map[string]interface{}
+		patchBytes []byte
+		err        error
+	)
+
+	// Remove our annotations, if present.
+	for annKey := range route.Annotations {
+		if annKey == epicgwv1.EPICLinkAnnotation {
+			patch = append(patch, map[string]interface{}{
+				"op":   "remove",
+				"path": epicgwv1.EPICLinkAnnotationPatch,
+			})
+		} else if annKey == epicgwv1.EPICConfigAnnotation {
+			patch = append(patch, map[string]interface{}{
+				"op":   "remove",
+				"path": epicgwv1.EPICConfigAnnotationPatch,
+			})
+		}
+	}
+
+	// apply the patch
+	if patchBytes, err = json.Marshal(patch); err != nil {
+		return err
+	}
+	if err := cl.Patch(ctx, route, client.RawPatch(types.JSONPatchType, patchBytes)); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// addSliceEpicLink adds our annotations that indicate that the slice
+// has been announced.
 func addSliceEpicLink(ctx context.Context, cl client.Client, slice *discoveryv1.EndpointSlice, link string, configName string, route *gatewayv1a2.HTTPRoute) error {
 	kind := gatewayv1a2.Kind("HTTPRoute")
 	ns := gatewayv1a2.Namespace(route.Namespace)
@@ -429,4 +506,25 @@ func hasBeenAnnounced(ctx context.Context, cl client.Client, slice *discoveryv1.
 		return false, err
 	}
 	return true, nil
+}
+
+func maybeDelete(ctx context.Context, cl client.Client, route *gatewayv1a2.HTTPRoute) error {
+	link, announced := route.Annotations[epicgwv1.EPICLinkAnnotation]
+	if announced {
+		// Get cached config name
+		configName, err := controllers.SplitNSName(route.Annotations[epicgwv1.EPICConfigAnnotation])
+		if err != nil {
+			return err
+		}
+		epic, err := controllers.ConnectToEPIC(ctx, cl, &configName.Namespace, configName.Name)
+		if err != nil {
+			return err
+		}
+		err = epic.Delete(link)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

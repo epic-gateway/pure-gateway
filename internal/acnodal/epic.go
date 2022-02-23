@@ -33,7 +33,8 @@ type EPIC interface {
 	Delete(svcUrl string) error
 	AnnounceSlice(url string, slice SliceSpec) (*SliceResponse, error)
 	UpdateSlice(url string, slice SliceSpec) (*SliceResponse, error)
-	AnnounceRoute(url string, name string, spec RouteSpec) (*RouteResponse, error)
+	AnnounceRoute(url string, spec RouteSpec) (*RouteResponse, error)
+	UpdateRoute(url string, spec RouteSpec) (*RouteResponse, error)
 }
 
 // epic represents one connection to an Acnodal Enterprise Gateway.
@@ -166,33 +167,6 @@ type GatewayResponse struct {
 	Message string  `json:"message,omitempty"`
 	Links   Links   `json:"link"`
 	Gateway Gateway `json:"proxy"`
-}
-
-type RouteCreate struct {
-	Route Route `json:"route"`
-}
-
-type Route struct {
-	ObjectMeta ObjectMeta `json:"metadata"`
-	Spec       RouteSpec  `json:"spec"`
-}
-
-// RouteSpec is a container that can hold different kinds of route
-// objects, for example, HTTPRoute.
-type RouteSpec struct {
-	// ClientRef points back to the client-side object that corresponds
-	// to this one.
-	ClientRef ClientRef `json:"clientRef,omitempty"`
-
-	HTTP gatewayv1a2.HTTPRouteSpec `json:"http,omitempty"`
-}
-
-// RouteResponse is the body of the HTTP response to a request to show
-// a Gateway Route.
-type RouteResponse struct {
-	Message string    `json:"message,omitempty"`
-	Links   Links     `json:"link"`
-	Route   RouteSpec `json:"route"`
 }
 
 // NewEPIC initializes a new EPIC instance. If error is non-nil then
@@ -332,25 +306,6 @@ func (n *epic) Delete(url string) error {
 		return fmt.Errorf("%s DELETE response code %d status \"%s\"", url, response.StatusCode(), response.Status())
 	}
 	return nil
-}
-
-func (n *epic) AnnounceRoute(url string, name string, spec RouteSpec) (*RouteResponse, error) {
-	response, err := n.http.R().
-		SetBody(RouteCreate{
-			Route: Route{
-				Spec: spec,
-			},
-		}).
-		SetError(RouteResponse{}).
-		SetResult(RouteResponse{}).
-		Post(url)
-	if err != nil {
-		return &RouteResponse{}, err
-	}
-	if response.IsError() {
-		return &RouteResponse{}, fmt.Errorf("response code %d status \"%s\"", response.StatusCode(), response.Status())
-	}
-	return response.Result().(*RouteResponse), nil
 }
 
 func ListenersToPorts(listeners []gatewayv1a2.Listener) []v1.ServicePort {
