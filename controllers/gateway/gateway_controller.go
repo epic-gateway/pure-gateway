@@ -144,7 +144,7 @@ func getEPICConfig(ctx context.Context, cl client.Client, gatewayClassName strin
 	}
 
 	// Check controller name - are we the right controller?
-	if gc.Spec.ControllerName != "acnodal.io/puregw" {
+	if gc.Spec.ControllerName != controllers.ControllerName {
 		return nil, nil
 	}
 

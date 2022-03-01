@@ -2,11 +2,11 @@
 apiVersion: gateway.networking.k8s.io/v1alpha2
 kind: GatewayClass
 metadata:
-  name: sample
+  name: epic-sample
 spec:
-  controllerName: acnodal.io/puregw
+  controllerName: acnodal.io/epic
   parametersRef:
-    name: sample
+    name: epic-sample
     namespace: default
     group: puregw.acnodal.io
     kind: GatewayClassConfig
@@ -14,6 +14,6 @@ spec:
 apiVersion: gateway.networking.k8s.io/v1alpha2
 kind: GatewayClass
 metadata:
-  name: not-puregw
+  name: not-epic
 spec:
-  controllerName: example.com/not-puregw
+  controllerName: example.com/not-epic

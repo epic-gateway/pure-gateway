@@ -2,15 +2,15 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sample
+  name: epic-sample
 spec:
   selector:
     matchLabels:
-      app: sample
+      app: epic-sample
   template:
     metadata:
       labels:
-        app: sample
+        app: epic-sample
     spec:
       containers:
       - image: purelb/kuard-amd64:blue
@@ -20,5 +20,5 @@ spec:
         maxSkew: 1
         labelSelector:
           matchLabels:
-            app: sample
+            app: epic-sample
         whenUnsatisfiable: ScheduleAnyway

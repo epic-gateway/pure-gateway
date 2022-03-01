@@ -2,7 +2,7 @@
 apiVersion: puregw.acnodal.io/v1
 kind: GatewayClassConfig
 metadata:
-  name: sample
+  name: epic-sample
 spec:
   epic:
     gateway-hostname: epic-ctl

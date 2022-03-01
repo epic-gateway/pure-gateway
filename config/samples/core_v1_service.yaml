@@ -2,11 +2,11 @@
 kind: Service
 apiVersion: v1
 metadata:
-  name: sample
+  name: epic-sample
 spec:
   type: NodePort
   selector:
-    app: sample
+    app: epic-sample
   ports:
   - port: 80
     targetPort: 8080

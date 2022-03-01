@@ -2,9 +2,9 @@
 apiVersion: gateway.networking.k8s.io/v1alpha2
 kind: Gateway
 metadata:
-  name: puregw-sample
+  name: epic-sample
 spec:
-  gatewayClassName: sample
+  gatewayClassName: epic-sample
   listeners:
   - protocol: HTTP
     port: 80
@@ -13,9 +13,9 @@ spec:
 apiVersion: gateway.networking.k8s.io/v1alpha2
 kind: Gateway
 metadata:
-  name: notpuregw-sample
+  name: notepic-sample
 spec:
-  gatewayClassName: not-puregw
+  gatewayClassName: not-epic
   listeners:
   - protocol: HTTP
     port: 80
