@@ -109,13 +109,11 @@ func (r *EndpointSliceReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	spec := acnodal.SliceSpec{
 		ClientRef: acnodal.ClientRef{
-			ClusterID: "puregw", // FIXME:
 			Namespace: slice.Namespace,
 			Name:      slice.Name,
 			UID:       string(slice.UID),
 		},
 		ParentRef: acnodal.ClientRef{
-			ClusterID: "puregw", // FIXME:
 			Namespace: slice.Namespace,
 			Name:      slice.ObjectMeta.OwnerReferences[0].Name,
 			UID:       string(slice.ObjectMeta.OwnerReferences[0].UID),

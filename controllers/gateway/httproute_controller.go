@@ -208,7 +208,6 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			_, err := epic.UpdateRoute(link,
 				acnodal.RouteSpec{
 					ClientRef: acnodal.ClientRef{
-						ClusterID: "puregw", // FIXME:
 						Namespace: announcedRoute.Namespace,
 						Name:      announcedRoute.Name,
 						UID:       string(announcedRoute.UID),
@@ -230,7 +229,6 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			routeResp, err := epic.AnnounceRoute(account.Links["create-route"],
 				acnodal.RouteSpec{
 					ClientRef: acnodal.ClientRef{
-						ClusterID: "puregw", // FIXME:
 						Namespace: announcedRoute.Namespace,
 						Name:      announcedRoute.Name,
 						UID:       string(announcedRoute.UID),
@@ -289,13 +287,11 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		// Announce slice
 		spec := acnodal.SliceSpec{
 			ClientRef: acnodal.ClientRef{
-				ClusterID: "puregw", // FIXME:
 				Namespace: slice.Namespace,
 				Name:      slice.Name,
 				UID:       string(slice.UID),
 			},
 			ParentRef: acnodal.ClientRef{
-				ClusterID: "puregw", // FIXME:
 				Namespace: slice.Namespace,
 				Name:      slice.ObjectMeta.OwnerReferences[0].Name,
 				UID:       string(slice.ObjectMeta.OwnerReferences[0].UID),

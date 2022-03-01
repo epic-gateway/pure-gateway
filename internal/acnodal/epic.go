@@ -244,7 +244,6 @@ func (n *epic) AnnounceGateway(url string, gw gatewayv1a2.Gateway) (GatewayRespo
 			Gateway: Gateway{
 				Spec: GatewaySpec{
 					ClientRef: ClientRef{
-						ClusterID: "puregw", // FIXME: what's the cluster ID?
 						Namespace: gw.Namespace,
 						Name:      gw.Name,
 						UID:       string(gw.UID),
