@@ -49,7 +49,7 @@ help: ## Display this help.
 
 ##@ Development
 
-manifests: CACHE != mktemp --directory
+manifests: CACHE != mktemp -d
 manifests: controller-gen kustomize ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 # cache kustomization.yaml because "kustomize edit" modifies it
