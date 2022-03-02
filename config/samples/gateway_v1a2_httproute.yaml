@@ -10,3 +10,6 @@ spec:
   - backendRefs:
     - name: epic-sample
       port: 8080
+      weight: 2
+    - name: epic-sample2
+      port: 8080

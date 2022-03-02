@@ -15,10 +15,40 @@ spec:
       containers:
       - image: purelb/kuard-amd64:blue
         name: kuard
+        env:
+        - name: CLUSTER_NAME
+          value: epic-sample
       topologySpreadConstraints:
       - topologyKey: kubernetes.io/hostname
         maxSkew: 1
         labelSelector:
           matchLabels:
             app: epic-sample
+        whenUnsatisfiable: ScheduleAnyway
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: epic-sample2
+spec:
+  selector:
+    matchLabels:
+      app: epic-sample2
+  template:
+    metadata:
+      labels:
+        app: epic-sample2
+    spec:
+      containers:
+      - image: purelb/kuard-amd64:blue
+        name: kuard
+        env:
+        - name: CLUSTER_NAME
+          value: epic-sample2
+      topologySpreadConstraints:
+      - topologyKey: kubernetes.io/hostname
+        maxSkew: 1
+        labelSelector:
+          matchLabels:
+            app: epic-sample2
         whenUnsatisfiable: ScheduleAnyway

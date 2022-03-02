@@ -11,3 +11,16 @@ spec:
   - port: 80
     targetPort: 8080
     name: http
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: epic-sample2
+spec:
+  type: NodePort
+  selector:
+    app: epic-sample2
+  ports:
+  - port: 80
+    targetPort: 8080
+    name: http
