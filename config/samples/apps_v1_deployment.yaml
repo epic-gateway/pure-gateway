@@ -13,7 +13,7 @@ spec:
         app: epic-sample
     spec:
       containers:
-      - image: purelb/kuard-amd64:blue
+      - image: k8s.gcr.io/echoserver:1.10
         name: kuard
         env:
         - name: CLUSTER_NAME
@@ -40,7 +40,7 @@ spec:
         app: epic-sample2
     spec:
       containers:
-      - image: purelb/kuard-amd64:blue
+      - image: k8s.gcr.io/echoserver:1.10
         name: kuard
         env:
         - name: CLUSTER_NAME
@@ -51,4 +51,31 @@ spec:
         labelSelector:
           matchLabels:
             app: epic-sample2
+        whenUnsatisfiable: ScheduleAnyway
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: epic-sample3
+spec:
+  selector:
+    matchLabels:
+      app: epic-sample3
+  template:
+    metadata:
+      labels:
+        app: epic-sample3
+    spec:
+      containers:
+      - image: k8s.gcr.io/echoserver:1.10
+        name: kuard
+        env:
+        - name: CLUSTER_NAME
+          value: epic-sample3
+      topologySpreadConstraints:
+      - topologyKey: kubernetes.io/hostname
+        maxSkew: 1
+        labelSelector:
+          matchLabels:
+            app: epic-sample3
         whenUnsatisfiable: ScheduleAnyway

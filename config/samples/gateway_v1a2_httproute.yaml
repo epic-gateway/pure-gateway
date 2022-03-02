@@ -7,6 +7,13 @@ spec:
   parentRefs:
   - name: epic-sample
   rules:
+  - matches:
+    - headers:
+      - name: x-epic-test
+        value: service3
+    backendRefs:
+    - name: epic-sample3
+      port: 8080
   - backendRefs:
     - name: epic-sample
       port: 8080
