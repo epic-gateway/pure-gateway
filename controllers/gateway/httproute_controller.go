@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -225,7 +226,18 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			l.Info("Missing info, will back off and retry")
 			return controllers.TryAgain, nil
 		} else {
-			// We have a complete Route so we can announce it to EPIC.
+			// We have a complete Route so we can announce it and its slices
+			// to EPIC.
+
+			// Announce the Slices that the Route references. We do this
+			// first so the slices will be in place when the route is
+			// announced. The slices need the route to be able to allocate
+			// tunnel IDs.
+			if err := announceSlices(ctx, r.Client, l, account.Links["create-slice"], epic, config.NamespacedName().String(), &route); err != nil {
+				return controllers.Done, err
+			}
+
+			// Announce the route to EPIC.
 			routeResp, err := epic.AnnounceRoute(account.Links["create-route"],
 				acnodal.RouteSpec{
 					ClientRef: acnodal.ClientRef{
@@ -247,14 +259,21 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}
 
+	return controllers.Done, nil
+}
+
+// announceSlices announces the slices that this HTTPRoute
+// references.If the error return value is non-nil them something has
+// gone wrong.
+func announceSlices(ctx context.Context, cl client.Client, l logr.Logger, sliceURL string, epic acnodal.EPIC, configName string, route *gatewayv1a2.HTTPRoute) error {
 	// Get the set of EndpointSlices that this Route references.
-	slices, incomplete, err := referencedSlices(ctx, r.Client, &route)
+	slices, incomplete, err := referencedSlices(ctx, cl, route)
 	if err != nil {
-		return controllers.Done, err
+		return err
 	}
 	if incomplete {
 		l.Info("Incomplete info, will back off and retry")
-		return controllers.TryAgain, nil
+		return nil
 	}
 	l.Info("Referenced slices", "slices", slices)
 
@@ -263,7 +282,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		// If this slice has been announced then we don't need to do it
 		// again. We don't need to update slices - the slice controller
 		// will take care of that.
-		if hasBeen, _ := hasBeenAnnounced(ctx, r.Client, slice); hasBeen {
+		if hasBeen, _ := hasBeenAnnounced(ctx, cl, slice); hasBeen {
 			l.Info("Previously announced", "slice", slice.Name)
 			continue
 		}
@@ -273,9 +292,9 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		for _, ep := range slice.Endpoints {
 			node := corev1.Node{}
 			nodeName := types.NamespacedName{Namespace: "", Name: *ep.NodeName}
-			err := r.Get(ctx, nodeName, &node)
+			err := cl.Get(ctx, nodeName, &node)
 			if err != nil {
-				return controllers.Done, err
+				return err
 			}
 			for _, addr := range node.Status.Addresses {
 				if addr.Type == corev1.NodeInternalIP {
@@ -306,21 +325,21 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			spec.EndpointSlice.Endpoints = []discoveryv1.Endpoint{}
 		}
 
-		sliceResp, err := epic.AnnounceSlice(account.Links["create-slice"], spec)
+		sliceResp, err := epic.AnnounceSlice(sliceURL, spec)
 		if err != nil {
 			l.Error(err, "announcing slice")
 			continue
 		}
 
 		// Annotate the Slice to mark it as "announced".
-		if err := addSliceEpicLink(ctx, r.Client, slice, sliceResp.Links["self"], config.NamespacedName().String(), &route); err != nil {
+		if err := addSliceEpicLink(ctx, cl, slice, sliceResp.Links["self"], configName, route); err != nil {
 			l.Error(err, "adding EPIC link to slice")
 			continue
 		}
 		l.Info("Slice announced", "epic-link", slice.Annotations[epicgwv1.EPICLinkAnnotation])
 	}
 
-	return controllers.Done, nil
+	return nil
 }
 
 // parentGW gets the parent Gateway resource pointed to by the
