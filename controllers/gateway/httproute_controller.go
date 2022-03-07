@@ -283,7 +283,7 @@ func announceSlices(ctx context.Context, cl client.Client, l logr.Logger, sliceU
 		// again. We don't need to update slices - the slice controller
 		// will take care of that.
 		if hasBeen, _ := hasBeenAnnounced(ctx, cl, slice); hasBeen {
-			l.Info("Previously announced", "slice", slice.Name)
+			l.Info("Slice previously announced", "slice", slice.Name)
 			continue
 		}
 

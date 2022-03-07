@@ -31,7 +31,7 @@ func runScript(l logr.Logger, script string) error {
 // for forcing SetBalancer to reload the filters which also
 // initializes the maps.
 func CleanupQueueDiscipline(l logr.Logger, nic string) error {
-	// tc filter del dev cni0 egress
+	// tc qdisc del dev cni0 clsact
 	return runProgram(l, "/usr/sbin/tc", "qdisc", "del", "dev", nic, "clsact")
 }
 

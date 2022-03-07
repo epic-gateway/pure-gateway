@@ -139,7 +139,7 @@ func setupTunnels(l logr.Logger, gw *gatewayv1a2.Gateway, spec epicgwv1.TrueIngr
 	// for this node. Tunnels belong to the service.
 	svcResponse, err := epic.FetchGateway(gw.Annotations[epicgwv1.EPICLinkAnnotation])
 	if err != nil {
-		return false, fmt.Errorf("service not found")
+		return false, fmt.Errorf("gateway %s not found: %s", gw.Annotations[epicgwv1.EPICLinkAnnotation], err)
 	}
 
 	// For each endpoint address on this node, set up a PFC tunnel.
