@@ -35,6 +35,7 @@ type EPIC interface {
 	AnnounceSlice(url string, slice SliceSpec) (*SliceResponse, error)
 	UpdateSlice(url string, slice SliceSpec) (*SliceResponse, error)
 	AnnounceRoute(url string, spec RouteSpec) (*RouteResponse, error)
+	FetchRoute(url string) (*RouteResponse, error)
 	UpdateRoute(url string, spec RouteSpec) (*RouteResponse, error)
 }
 
