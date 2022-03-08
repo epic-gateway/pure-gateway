@@ -54,7 +54,7 @@ func (r *EndpointSliceReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	shadow := epicgwv1.EndpointSliceShadow{}
 	sliceName := types.NamespacedName{Namespace: req.Namespace, Name: req.Name}
 	if err := r.Get(ctx, sliceName, &shadow); err != nil {
-		l.Info("Not announced, will ignore")
+		l.V(1).Info("Not announced, will ignore")
 		return controllers.Done, client.IgnoreNotFound(err)
 	}
 
@@ -86,7 +86,7 @@ func (r *EndpointSliceReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return controllers.Done, err
 	}
 
-	l.Info("Reconciling")
+	l.V(1).Info("Reconciling")
 
 	// The resource is not being deleted, and it's interesting to
 	// EPIC. It changed so update its EPIC-side resource.

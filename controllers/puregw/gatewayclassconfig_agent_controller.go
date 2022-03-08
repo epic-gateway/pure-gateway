@@ -60,7 +60,7 @@ func (r *GatewayClassConfigAgentReconciler) Reconcile(ctx context.Context, req c
 		return controllers.Done, client.IgnoreNotFound(err)
 	}
 
-	l.Info("Reconciling")
+	l.V(1).Info("Reconciling")
 
 	// Clean up to ensure that we re-load the TrueIngress components
 	resetNetworking(l, gwc.Spec.TrueIngress.EncapAttachment.Interface, gwc.Spec.TrueIngress.DecapAttachment.Interface)

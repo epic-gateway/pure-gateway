@@ -118,7 +118,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			return controllers.Done, err
 		}
 		if config == nil {
-			l.Info("Not our ControllerName, will ignore", "parentRef", parent, "controller", gw.Spec.GatewayClassName)
+			l.V(1).Info("Not our ControllerName, will ignore", "parentRef", parent, "controller", gw.Spec.GatewayClassName)
 			return controllers.Done, nil
 		}
 	}
@@ -128,7 +128,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return controllers.Done, err
 	}
 
-	l.Info("Reconciling")
+	l.V(1).Info("Reconciling")
 
 	account, err := epic.GetAccount()
 	if err != nil {

@@ -95,7 +95,7 @@ func (r *HTTPRouteAgentReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return controllers.Done, err
 	}
 	if config == nil {
-		l.Info("Not our ControllerName, will ignore")
+		l.V(1).Info("Not our ControllerName, will ignore")
 		return controllers.Done, nil
 	}
 
@@ -104,7 +104,7 @@ func (r *HTTPRouteAgentReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return controllers.Done, err
 	}
 
-	l.Info("Reconciling")
+	l.V(1).Info("Reconciling")
 
 	// The resource is not being deleted, and it's our GWClass, so add
 	// our finalizer.

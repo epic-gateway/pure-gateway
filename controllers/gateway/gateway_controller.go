@@ -68,7 +68,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return controllers.Done, err
 	}
 	if config == nil {
-		l.Info("Not our ControllerName, will ignore")
+		l.V(1).Info("Not our ControllerName, will ignore")
 		return controllers.Done, nil
 	}
 
@@ -107,7 +107,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return controllers.Done, nil
 	}
 
-	l.Info("Reconciling")
+	l.V(1).Info("Reconciling")
 
 	// The resource is not being deleted, and it's our GWClass, so add
 	// our finalizer.
