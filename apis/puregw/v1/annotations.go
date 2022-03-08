@@ -5,6 +5,14 @@ Copyright 2022 Acnodal.
 package v1
 
 const (
+	// User-visible annotations
+
+	// EPICSharingKeyAnnotation is applied to a Gateway resource when
+	// that resource is a shared Gateway. This means that the EPIC
+	// Gateway client will connect to that Gateway instead of creating a
+	// new one.
+	EPICSharingKeyAnnotation = "acnodal.io/epic-sharing-key"
+
 	// Internal annotations that probably aren't useful to users.
 
 	// EPICLinkAnnotation stores the link to the corresponding resource

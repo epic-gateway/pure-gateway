@@ -24,6 +24,7 @@ import (
 	epicgwv1 "acnodal.io/puregw/apis/puregw/v1"
 	"acnodal.io/puregw/controllers"
 	"acnodal.io/puregw/internal/acnodal"
+	"acnodal.io/puregw/internal/gateway"
 )
 
 // HTTPRouteReconciler reconciles a HTTPRoute object
@@ -156,7 +157,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			l.Info("Parent service not found", "service", gwName)
 			missingParent = true
 		} else {
-			announcedRoute.Spec.ParentRefs[i].Name = gatewayv1a2.ObjectName(gw.UID)
+			announcedRoute.Spec.ParentRefs[i].Name = gatewayv1a2.ObjectName(gateway.GatewayEPICUID(gw))
 		}
 	}
 

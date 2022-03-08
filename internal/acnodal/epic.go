@@ -17,6 +17,8 @@ import (
 	"github.com/go-resty/resty/v2"
 	v1 "k8s.io/api/core/v1"
 	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	"acnodal.io/puregw/internal/gateway"
 )
 
 const (
@@ -247,7 +249,7 @@ func (n *epic) AnnounceGateway(url string, gw gatewayv1a2.Gateway) (GatewayRespo
 					ClientRef: ClientRef{
 						Namespace: gw.Namespace,
 						Name:      gw.Name,
-						UID:       string(gw.UID),
+						UID:       gateway.GatewayEPICUID(gw),
 					},
 					DisplayName: gw.Name,
 					Ports:       ListenersToPorts(gw.Spec.Listeners),
