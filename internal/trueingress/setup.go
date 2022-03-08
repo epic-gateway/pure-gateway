@@ -31,16 +31,18 @@ func runScript(l logr.Logger, script string) error {
 // for forcing SetBalancer to reload the filters which also
 // initializes the maps.
 func CleanupQueueDiscipline(l logr.Logger, nic string) error {
+	// remove the clsact qdisc from the nic if it's there
 	// tc qdisc del dev cni0 clsact
-	return runProgram(l, "/usr/sbin/tc", "qdisc", "del", "dev", nic, "clsact")
+	return runScript(l, fmt.Sprintf("/usr/sbin/tc qdisc list dev %[1]s clsact | /usr/bin/grep clsact && /usr/sbin/tc qdisc del dev %[1]s clsact || true", nic))
 }
 
 // CleanupFilter removes our filters from the specified nic. It's useful
 // for forcing SetBalancer to reload the filters which also
 // initializes the maps.
 func CleanupFilter(l logr.Logger, nic string, direction string) error {
+	// add the pfc_{encap|decap}_tc filter to the nic if it's not already there
 	// tc filter del dev cni0 egress
-	return runProgram(l, "/usr/sbin/tc", "filter", "del", "dev", nic, direction)
+	return runScript(l, fmt.Sprintf("/usr/sbin/tc filter show dev %[1]s %[2]s | /usr/bin/grep 'pfc_encap_tc\\|pfc_decap_tc' && /usr/sbin/tc filter del dev %[1]s %[2]s || true", nic, direction))
 }
 
 // SetupNIC adds the PFC components to nic. direction should be either
