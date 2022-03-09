@@ -62,7 +62,7 @@ func (r *HTTPRouteAgentReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		finalizerName = "epic.acnodal.io/agent_"
 	)
 
-	// Get the Gateway that caused this request
+	// Get the Resource that triggered this request
 	route := gatewayv1a2.HTTPRoute{}
 	if err := r.Get(ctx, req.NamespacedName, &route); err != nil {
 		// Ignore not-found errors, since they can't be fixed by an
@@ -114,7 +114,7 @@ func (r *HTTPRouteAgentReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// Setup tunnels. If EPIC hasn't yet filled in everything that we
 	// need we'll back off and try again.
-	slices, incomplete, err := referencedSlices(ctx, r.Client, &route)
+	slices, incomplete, err := routeSlices(ctx, r.Client, &route)
 	if err != nil {
 		return controllers.Done, err
 	}
@@ -130,7 +130,8 @@ func (r *HTTPRouteAgentReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return controllers.Done, err
 	}
 
-	return controllers.Done, nil
+	l.V(1).Info("Reconcile complete, will back off and poll for changes")
+	return controllers.TryAgainLater, nil
 }
 
 func setupTunnels(l logr.Logger, gw *gatewayv1a2.Gateway, spec epicgwv1.TrueIngress, slices []*discoveryv1.EndpointSlice, epic acnodal.EPIC) (incomplete bool, err error) {

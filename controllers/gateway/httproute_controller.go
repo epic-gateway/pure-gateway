@@ -268,7 +268,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 // gone wrong.
 func announceSlices(ctx context.Context, cl client.Client, l logr.Logger, sliceURL string, epic acnodal.EPIC, configName string, route *gatewayv1a2.HTTPRoute) error {
 	// Get the set of EndpointSlices that this Route references.
-	slices, incomplete, err := referencedSlices(ctx, cl, route)
+	slices, incomplete, err := routeSlices(ctx, cl, route)
 	if err != nil {
 		return err
 	}
@@ -276,7 +276,7 @@ func announceSlices(ctx context.Context, cl client.Client, l logr.Logger, sliceU
 		l.Info("Incomplete info, will back off and retry")
 		return nil
 	}
-	l.Info("Referenced slices", "slices", slices)
+	l.V(1).Info("Referenced slices", "slices", slices)
 
 	// Announce the EndpointSlices that the Route references.
 	for _, slice := range slices {
@@ -353,12 +353,12 @@ func parentGW(ctx context.Context, cl client.Client, ref gatewayv1a2.ParentRef, 
 	return cl.Get(ctx, gwName, gw)
 }
 
-// referencedSlices returns all of the slices that belong to all of
+// routeSlices returns all of the slices that belong to all of
 // the services referenced by route. If incomplete is true then
 // something is missing so the controller needs to back off and retry
 // later. If err is non-nil then the array of EndpointSlices is
 // invalid.
-func referencedSlices(ctx context.Context, cl client.Client, route *gatewayv1a2.HTTPRoute) (slices []*discoveryv1.EndpointSlice, incomplete bool, err error) {
+func routeSlices(ctx context.Context, cl client.Client, route *gatewayv1a2.HTTPRoute) (slices []*discoveryv1.EndpointSlice, incomplete bool, err error) {
 	// Assume that we can reach all of our services.
 	incomplete = false
 

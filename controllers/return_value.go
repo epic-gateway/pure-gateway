@@ -16,4 +16,7 @@ var (
 
 	// TryAgain asks the controller manager to retry.
 	TryAgain = ctrl.Result{RequeueAfter: 10 * time.Second}
+
+	// TryAgainLater asks the controller manager to retry.
+	TryAgainLater = ctrl.Result{RequeueAfter: 30 * time.Second}
 )
