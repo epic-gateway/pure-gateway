@@ -45,4 +45,9 @@ resources:
   kind: EndpointSliceShadow
   path: acnodal.io/puregw/apis/puregw/v1
   version: v1
+- controller: true
+  domain: networking.k8s.io
+  group: gateway
+  kind: GatewayClass
+  version: v1alpha2
 version: "3"
