@@ -8,9 +8,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
+	"github.com/go-logr/logr"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -18,6 +22,7 @@ import (
 
 	epicgwv1 "acnodal.io/puregw/apis/puregw/v1"
 	"acnodal.io/puregw/controllers"
+	"acnodal.io/puregw/internal/status"
 )
 
 // GatewayReconciler reconciles a Gateway object
@@ -133,6 +138,11 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	l.Info("Announced", "self-link", response.Links["self"])
 
+	// Tell the user that we're working on bringing up the Gateway.
+	if err := markReady(ctx, r.Client, l, &gw); err != nil {
+		return controllers.Done, err
+	}
+
 	return controllers.Done, nil
 }
 
@@ -205,4 +215,37 @@ func (r *GatewayReconciler) addEpicLink(ctx context.Context, gw *gatewayv1a2.Gat
 	}
 
 	return nil
+}
+
+// markReady adds a Status Condition to indicate that we're
+// setting up the Gateway.
+func markReady(ctx context.Context, cl client.Client, l logr.Logger, gw *gatewayv1a2.Gateway) error {
+	key := client.ObjectKey{Namespace: gw.GetNamespace(), Name: gw.GetName()}
+
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		// Fetch the resource here; you need to refetch it on every try,
+		// since if you got a conflict on the last update attempt then
+		// you need to get the current version before making your own
+		// changes.
+		if err := cl.Get(ctx, key, gw); err != nil {
+			return err
+		}
+
+		gsu := status.GatewayStatusUpdate{
+			FullName:           types.NamespacedName{Namespace: gw.Namespace, Name: gw.Name},
+			Conditions:         make(map[gatewayv1a2.GatewayConditionType]metav1.Condition),
+			ExistingConditions: nil,
+			Generation:         gw.Generation,
+			TransitionTime:     metav1.NewTime(time.Now()),
+		}
+		gsu.AddCondition(gatewayv1a2.GatewayConditionReady, metav1.ConditionTrue, status.ReasonValidGateway, "Announced to EPIC")
+
+		got, ok := gsu.Mutate(gw).(*gatewayv1a2.Gateway)
+		if !ok {
+			return fmt.Errorf("Failed to mutate Gateway")
+		}
+
+		// Try to update
+		return cl.Status().Update(ctx, got)
+	})
 }
