@@ -7,13 +7,16 @@ package gateway
 import (
 	"context"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"acnodal.io/puregw/controllers"
+	"acnodal.io/puregw/internal/status"
 )
 
 // GatewayClassReconciler reconciles a GatewayClass object
@@ -49,15 +52,15 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	l := log.FromContext(ctx)
 
 	// Get the class that caused this request
-	gwc := gatewayv1a2.GatewayClass{}
-	if err := r.Get(ctx, req.NamespacedName, &gwc); err != nil {
+	gc := gatewayv1a2.GatewayClass{}
+	if err := r.Get(ctx, req.NamespacedName, &gc); err != nil {
 		// ignore not-found errors, since they can't be fixed by an
 		// immediate requeue (we'll need to wait for a new notification),
 		// and we can get them on deleted requests.
 		return controllers.Done, client.IgnoreNotFound(err)
 	}
 
-	config, err := getEPICConfig(ctx, r.Client, gwc.Name)
+	config, err := getEPICConfig(ctx, r.Client, gc.Name)
 	if err != nil {
 		return controllers.Done, err
 	}
@@ -66,12 +69,45 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return controllers.Done, nil
 	}
 
-	_, err = controllers.ConnectToEPIC(ctx, r.Client, &config.Namespace, config.Name)
+	epic, err := controllers.ConnectToEPIC(ctx, r.Client, &config.Namespace, config.Name)
 	if err != nil {
 		return controllers.Done, err
 	}
 
 	l.V(1).Info("Reconciling")
 
-	return ctrl.Result{}, nil
+	// Make a test connection to EPIC to see if this resource and its
+	// GatewayClassConfig work.
+	accepted := false
+	if _, err := epic.GetAccount(); err == nil {
+		accepted = true
+	}
+
+	// Mark this GWC with the result of the test connection.
+	if err := markAcceptance(ctx, r.Client, l, &gc, accepted); err != nil {
+		return controllers.Done, err
+	}
+
+	return controllers.Done, nil
+}
+
+// markAcceptance adds a Status Condition to indicate whether we
+// accept or reject this GatewayClass.
+func markAcceptance(ctx context.Context, cl client.Client, l logr.Logger, gc *gatewayv1a2.GatewayClass, accepted bool) error {
+	key := client.ObjectKey{Namespace: gc.GetNamespace(), Name: gc.GetName()}
+
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		// Fetch the resource here; you need to refetch it on every try,
+		// since if you got a conflict on the last update attempt then
+		// you need to get the current version before making your own
+		// changes.
+		if err := cl.Get(ctx, key, gc); err != nil {
+			return err
+		}
+
+		status.SetGatewayClassAccepted(ctx, cl, gc, accepted)
+
+		// Try to update
+		return cl.Status().Update(ctx, gc)
+	})
 }

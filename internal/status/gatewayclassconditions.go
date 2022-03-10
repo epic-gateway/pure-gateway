@@ -32,7 +32,7 @@ func computeGatewayClassAcceptedCondition(gatewayClass *gatewayapi_v1alpha2.Gate
 			Type:               string(gatewayapi_v1alpha2.GatewayClassConditionStatusAccepted),
 			Status:             metav1.ConditionTrue,
 			Reason:             "Valid",
-			Message:            "Valid GatewayClass",
+			Message:            "EPIC connection succeeded",
 			ObservedGeneration: gatewayClass.Generation,
 			LastTransitionTime: metav1.NewTime(time.Now()),
 		}
@@ -41,7 +41,7 @@ func computeGatewayClassAcceptedCondition(gatewayClass *gatewayapi_v1alpha2.Gate
 			Type:               string(gatewayapi_v1alpha2.GatewayClassConditionStatusAccepted),
 			Status:             metav1.ConditionFalse,
 			Reason:             "Invalid",
-			Message:            "Invalid GatewayClass: another older GatewayClass with the same Spec.Controller exists",
+			Message:            "Invalid GatewayClassConfig: unable to connect to EPIC",
 			ObservedGeneration: gatewayClass.Generation,
 			LastTransitionTime: metav1.NewTime(time.Now()),
 		}
