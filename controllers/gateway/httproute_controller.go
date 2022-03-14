@@ -7,6 +7,8 @@ package gateway
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -16,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -25,6 +28,7 @@ import (
 	"acnodal.io/puregw/controllers"
 	"acnodal.io/puregw/internal/acnodal"
 	"acnodal.io/puregw/internal/gateway"
+	"acnodal.io/puregw/internal/status"
 )
 
 // HTTPRouteReconciler reconciles a HTTPRoute object
@@ -256,6 +260,13 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			if err := addEpicLink(ctx, r.Client, &route, routeResp.Links["self"], config.NamespacedName().String()); err != nil {
 				return controllers.Done, err
 			}
+
+			// Update the Route's status
+			err = markRouteReady(ctx, r.Client, l, client.ObjectKey{Namespace: route.GetNamespace(), Name: route.GetName()})
+			if err != nil {
+				return controllers.Done, err
+			}
+
 			l.Info("Announced", "epic-link", route.Annotations[epicgwv1.EPICLinkAnnotation])
 		}
 	}
@@ -543,4 +554,56 @@ func maybeDelete(ctx context.Context, cl client.Client, route *gatewayv1a2.HTTPR
 	}
 
 	return nil
+}
+
+// markReady adds a Status Condition to indicate that we're
+// setting up the Gateway.
+func markRouteReady(ctx context.Context, cl client.Client, l logr.Logger, routeKey client.ObjectKey) error {
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		route := gatewayv1a2.HTTPRoute{}
+
+		// Fetch the resource here; you need to refetch it on every try,
+		// since if you got a conflict on the last update attempt then
+		// you need to get the current version before making your own
+		// changes.
+		if err := cl.Get(ctx, routeKey, &route); err != nil {
+			return err
+		}
+
+		var route2 *gatewayv1a2.HTTPRoute
+		for _, gwRef := range route.Spec.ParentRefs {
+			// Use Contour code to add/update the Route's Status Condition to
+			// "Ready" with respect to this Gateway.
+			rcu := status.RouteConditionsUpdate{
+				FullName:           types.NamespacedName{Namespace: route.Namespace, Name: route.Name},
+				Conditions:         make(map[gatewayv1a2.RouteConditionType]metav1.Condition),
+				ExistingConditions: nil,
+				GatewayRef:         namespacedNameOfRef(gwRef),
+				GatewayController:  controllers.GatewayController,
+				Generation:         route.Generation,
+				TransitionTime:     metav1.NewTime(time.Now()),
+			}
+			rcu.AddCondition(gatewayv1a2.ConditionRouteAccepted, metav1.ConditionTrue, status.ReasonValid, "Announced to EPIC")
+
+			var ok bool
+			route2, ok = rcu.Mutate(&route).(*gatewayv1a2.HTTPRoute)
+			if !ok {
+				return fmt.Errorf("Failed to mutate Gateway")
+			}
+		}
+
+		// Try to update
+		return cl.Status().Update(ctx, route2)
+	})
+}
+
+// NamespacedNameOf returns the NamespacedName of a ParentRef.
+func namespacedNameOfRef(ref gatewayv1a2.ParentRef) types.NamespacedName {
+	name := types.NamespacedName{Namespace: metav1.NamespaceDefault, Name: string(ref.Name)}
+
+	if ref.Namespace != nil {
+		name.Namespace = string(*ref.Namespace)
+	}
+
+	return name
 }

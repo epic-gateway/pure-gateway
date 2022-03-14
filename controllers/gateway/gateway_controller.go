@@ -155,7 +155,7 @@ func getEPICConfig(ctx context.Context, cl client.Client, gatewayClassName strin
 	}
 
 	// Check controller name - are we the right controller?
-	if gc.Spec.ControllerName != controllers.ControllerName {
+	if gc.Spec.ControllerName != controllers.GatewayController {
 		return nil, nil
 	}
 
