@@ -22,6 +22,7 @@ import (
 
 	epicgwv1 "acnodal.io/puregw/apis/puregw/v1"
 	"acnodal.io/puregw/controllers"
+	"acnodal.io/puregw/internal/gatewayapi"
 	"acnodal.io/puregw/internal/status"
 )
 
@@ -139,7 +140,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	l.Info("Announced", "self-link", response.Links["self"])
 
 	// Tell the user that we're working on bringing up the Gateway.
-	if err := markReady(ctx, r.Client, l, &gw); err != nil {
+	if err := markReady(ctx, r.Client, l, &gw, response.Gateway.Spec.Address); err != nil {
 		return controllers.Done, err
 	}
 
@@ -219,7 +220,7 @@ func (r *GatewayReconciler) addEpicLink(ctx context.Context, gw *gatewayv1a2.Gat
 
 // markReady adds a Status Condition to indicate that we're
 // setting up the Gateway.
-func markReady(ctx context.Context, cl client.Client, l logr.Logger, gw *gatewayv1a2.Gateway) error {
+func markReady(ctx context.Context, cl client.Client, l logr.Logger, gw *gatewayv1a2.Gateway, publicIP string) error {
 	key := client.ObjectKey{Namespace: gw.GetNamespace(), Name: gw.GetName()}
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -231,6 +232,8 @@ func markReady(ctx context.Context, cl client.Client, l logr.Logger, gw *gateway
 			return err
 		}
 
+		// Use Contour code to add/update the Gateway's Status Condition
+		// to "Ready".
 		gsu := status.GatewayStatusUpdate{
 			FullName:           types.NamespacedName{Namespace: gw.Namespace, Name: gw.Name},
 			Conditions:         make(map[gatewayv1a2.GatewayConditionType]metav1.Condition),
@@ -239,11 +242,17 @@ func markReady(ctx context.Context, cl client.Client, l logr.Logger, gw *gateway
 			TransitionTime:     metav1.NewTime(time.Now()),
 		}
 		gsu.AddCondition(gatewayv1a2.GatewayConditionReady, metav1.ConditionTrue, status.ReasonValidGateway, "Announced to EPIC")
-
 		got, ok := gsu.Mutate(gw).(*gatewayv1a2.Gateway)
 		if !ok {
 			return fmt.Errorf("Failed to mutate Gateway")
 		}
+
+		// Add the IP address to GW.Status so the user can find out what
+		// it is.
+		got.Status.Addresses = []gatewayv1a2.GatewayAddress{{
+			Type:  gatewayapi.AddressTypePtr(gatewayv1a2.IPAddressType),
+			Value: publicIP,
+		}}
 
 		// Try to update
 		return cl.Status().Update(ctx, got)
