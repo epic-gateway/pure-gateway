@@ -111,7 +111,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	for _, parent := range route.Spec.ParentRefs {
 		gw := gatewayv1a2.Gateway{}
 		// FIXME: need to handle multiple parents
-		if err := parentGW(ctx, r.Client, parent, &gw); err != nil {
+		if err := parentGW(ctx, r.Client, route.Namespace, parent, &gw); err != nil {
 			l.Info("Can't get parent, will retry", "parentRef", parent)
 			return controllers.TryAgain, nil
 		}
@@ -153,7 +153,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// their names. We use UIDs on the EPIC side because they're unique.
 	for i, parent := range announcedRoute.Spec.ParentRefs {
 		gw := gatewayv1a2.Gateway{}
-		gwName := types.NamespacedName{Namespace: "default", Name: string(parent.Name)}
+		gwName := types.NamespacedName{Namespace: route.Namespace, Name: string(parent.Name)}
 		if parent.Namespace != nil {
 			gwName.Namespace = string(*parent.Namespace)
 		}
@@ -171,7 +171,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	for i, rule := range announcedRoute.Spec.Rules {
 		for j, ref := range rule.BackendRefs {
 			svc := corev1.Service{}
-			svcName := types.NamespacedName{Namespace: "default", Name: string(ref.Name)}
+			svcName := types.NamespacedName{Namespace: route.Namespace, Name: string(ref.Name)}
 			if ref.Namespace != nil {
 				svcName.Namespace = string(*ref.Namespace)
 			}
@@ -355,9 +355,11 @@ func announceSlices(ctx context.Context, cl client.Client, l logr.Logger, sliceU
 }
 
 // parentGW gets the parent Gateway resource pointed to by the
-// provided ParentRef.
-func parentGW(ctx context.Context, cl client.Client, ref gatewayv1a2.ParentRef, gw *gatewayv1a2.Gateway) error {
-	gwName := types.NamespacedName{Namespace: "default", Name: string(ref.Name)}
+// provided ParentRef. defaultNS is the namespace of the object that
+// contains the ref, which means that it's the default namespace if
+// the ref doesn't have one.
+func parentGW(ctx context.Context, cl client.Client, defaultNS string, ref gatewayv1a2.ParentRef, gw *gatewayv1a2.Gateway) error {
+	gwName := types.NamespacedName{Namespace: defaultNS, Name: string(ref.Name)}
 	if ref.Namespace != nil {
 		gwName.Namespace = string(*ref.Namespace)
 	}

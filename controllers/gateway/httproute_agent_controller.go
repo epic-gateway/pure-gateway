@@ -84,7 +84,7 @@ func (r *HTTPRouteAgentReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	// we can.
 	gw := gatewayv1a2.Gateway{}
 	// FIXME: need to handle multiple parents
-	if err := parentGW(ctx, r.Client, route.Spec.ParentRefs[0], &gw); err != nil {
+	if err := parentGW(ctx, r.Client, route.Namespace, route.Spec.ParentRefs[0], &gw); err != nil {
 		l.Info("Can't get parent, will retry", "parentRef", route.Spec.ParentRefs[0])
 		return controllers.TryAgain, nil
 	}
