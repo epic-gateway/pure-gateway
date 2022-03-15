@@ -153,12 +153,8 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// their names. We use UIDs on the EPIC side because they're unique.
 	for i, parent := range announcedRoute.Spec.ParentRefs {
 		gw := gatewayv1a2.Gateway{}
-		gwName := types.NamespacedName{Namespace: route.Namespace, Name: string(parent.Name)}
-		if parent.Namespace != nil {
-			gwName.Namespace = string(*parent.Namespace)
-		}
-		if err := r.Get(ctx, gwName, &gw); err != nil {
-			l.Info("Parent service not found", "service", gwName)
+		if err := parentGW(ctx, r.Client, route.Namespace, parent, &gw); err != nil {
+			l.Info("Parent not found", "parentRef", parent)
 			missingParent = true
 		} else {
 			announcedRoute.Spec.ParentRefs[i].Name = gatewayv1a2.ObjectName(gateway.GatewayEPICUID(gw))
@@ -171,12 +167,8 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	for i, rule := range announcedRoute.Spec.Rules {
 		for j, ref := range rule.BackendRefs {
 			svc := corev1.Service{}
-			svcName := types.NamespacedName{Namespace: route.Namespace, Name: string(ref.Name)}
-			if ref.Namespace != nil {
-				svcName.Namespace = string(*ref.Namespace)
-			}
-			if err := r.Get(ctx, svcName, &svc); err != nil {
-				l.Info("Referenced service not found", "service", svcName)
+			if err := r.Get(ctx, namespacedNameOfHTTPBackendRef(ref, route.Namespace), &svc); err != nil {
+				l.Info("Backend not found", "backendRef", ref)
 				missingService = true
 			} else {
 				announcedRoute.Spec.Rules[i].BackendRefs[j].Name = gatewayv1a2.ObjectName(svc.UID)
@@ -284,7 +276,7 @@ func announceSlices(ctx context.Context, cl client.Client, l logr.Logger, sliceU
 		return err
 	}
 	if incomplete {
-		l.Info("Incomplete info, will back off and retry")
+		l.Info("Incomplete backend slice info, will back off and retry")
 		return nil
 	}
 	l.V(1).Info("Referenced slices", "slices", slices)
@@ -359,10 +351,7 @@ func announceSlices(ctx context.Context, cl client.Client, l logr.Logger, sliceU
 // contains the ref, which means that it's the default namespace if
 // the ref doesn't have one.
 func parentGW(ctx context.Context, cl client.Client, defaultNS string, ref gatewayv1a2.ParentRef, gw *gatewayv1a2.Gateway) error {
-	gwName := types.NamespacedName{Namespace: defaultNS, Name: string(ref.Name)}
-	if ref.Namespace != nil {
-		gwName.Namespace = string(*ref.Namespace)
-	}
+	gwName := namespacedNameOfParentRef(ref, defaultNS)
 	return cl.Get(ctx, gwName, gw)
 }
 
@@ -383,11 +372,7 @@ func routeSlices(ctx context.Context, cl client.Client, route *gatewayv1a2.HTTPR
 
 			// Get the service referenced by this ref.
 			svc := corev1.Service{}
-			svcName := types.NamespacedName{Namespace: "default", Name: string(ref.Name)}
-			if ref.Namespace != nil {
-				svcName.Namespace = string(*ref.Namespace)
-			}
-			err = cl.Get(ctx, svcName, &svc)
+			err = cl.Get(ctx, namespacedNameOfHTTPBackendRef(ref, route.Namespace), &svc)
 			if err != nil {
 				// If the service doesn't exist yet then tell the controller
 				// to back off and retry.
@@ -402,7 +387,7 @@ func routeSlices(ctx context.Context, cl client.Client, route *gatewayv1a2.HTTPR
 			// Get the slices that belong to this service.
 			sliceList := discoveryv1.EndpointSliceList{}
 			if err = cl.List(ctx, &sliceList, &client.ListOptions{
-				Namespace: route.Namespace,
+				Namespace: svc.Namespace,
 				LabelSelector: labels.SelectorFromSet(map[string]string{
 					"kubernetes.io/service-name": svc.Name,
 				}),
@@ -580,7 +565,7 @@ func markRouteReady(ctx context.Context, cl client.Client, l logr.Logger, routeK
 				FullName:           types.NamespacedName{Namespace: route.Namespace, Name: route.Name},
 				Conditions:         make(map[gatewayv1a2.RouteConditionType]metav1.Condition),
 				ExistingConditions: nil,
-				GatewayRef:         namespacedNameOfRef(gwRef),
+				GatewayRef:         namespacedNameOfParentRef(gwRef, routeKey.Namespace),
 				GatewayController:  controllers.GatewayController,
 				Generation:         route.Generation,
 				TransitionTime:     metav1.NewTime(time.Now()),
@@ -599,13 +584,22 @@ func markRouteReady(ctx context.Context, cl client.Client, l logr.Logger, routeK
 	})
 }
 
-// NamespacedNameOf returns the NamespacedName of a ParentRef.
-func namespacedNameOfRef(ref gatewayv1a2.ParentRef) types.NamespacedName {
-	name := types.NamespacedName{Namespace: metav1.NamespaceDefault, Name: string(ref.Name)}
-
+// namespacedNameOfParentRef returns the NamespacedName of a
+// ParentRef.
+func namespacedNameOfParentRef(ref gatewayv1a2.ParentRef, defaultNS string) types.NamespacedName {
+	name := types.NamespacedName{Namespace: defaultNS, Name: string(ref.Name)}
 	if ref.Namespace != nil {
 		name.Namespace = string(*ref.Namespace)
 	}
+	return name
+}
 
+// namespacedNameOfHTTPBackendRef returns the NamespacedName of an
+// HTTPBackendRef.
+func namespacedNameOfHTTPBackendRef(ref gatewayv1a2.HTTPBackendRef, defaultNS string) types.NamespacedName {
+	name := types.NamespacedName{Namespace: defaultNS, Name: string(ref.Name)}
+	if ref.Namespace != nil {
+		name.Namespace = string(*ref.Namespace)
+	}
 	return name
 }
