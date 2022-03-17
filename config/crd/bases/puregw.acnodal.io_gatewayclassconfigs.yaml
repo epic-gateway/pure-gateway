@@ -44,6 +44,12 @@ spec:
                 description: EPIC configures the allocator to work with the Acnodal
                   Enterprise Gateway.
                 properties:
+                  client-name:
+                    default: epic-gateway
+                    description: ClientName is used to tag resources on the EPIC server.
+                      It's purely informative but it's helpful to have each client
+                      cluster have a different name.
+                    type: string
                   gateway-hostname:
                     type: string
                   gateway-template:

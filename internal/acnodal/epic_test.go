@@ -62,7 +62,7 @@ func MustEPIC(t *testing.T) EPIC {
 	if err != nil {
 		t.Fatal("formatting EPIC URL", err)
 	}
-	e, err := NewEPIC(u, ServiceAccount, ServiceKey)
+	e, err := NewEPIC(u, ServiceAccount, ServiceKey, "unit-test")
 	if err != nil {
 		t.Fatal("initializing EPIC", err)
 	}

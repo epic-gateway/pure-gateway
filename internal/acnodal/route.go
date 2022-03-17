@@ -39,6 +39,8 @@ type RouteResponse struct {
 }
 
 func (e *epic) AnnounceRoute(url string, spec RouteSpec) (*RouteResponse, error) {
+	spec.ClientRef.ClusterID = e.clientName
+
 	response, err := e.http.R().
 		SetBody(RouteCreate{
 			Route: Route{
@@ -88,6 +90,7 @@ func (n *epic) FetchRoute(url string) (*RouteResponse, error) {
 }
 
 func (e *epic) UpdateRoute(url string, spec RouteSpec) (*RouteResponse, error) {
+	spec.ClientRef.ClusterID = e.clientName
 	response, err := e.http.R().
 		SetBody(RouteCreate{
 			Route: Route{

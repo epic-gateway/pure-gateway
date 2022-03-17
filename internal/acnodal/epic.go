@@ -43,9 +43,10 @@ type EPIC interface {
 
 // epic represents one connection to an Acnodal Enterprise Gateway.
 type epic struct {
-	http      resty.Client
-	groupURL  string
-	authToken string
+	http       resty.Client
+	groupURL   string
+	authToken  string
+	clientName string
 }
 
 // Links holds a map of URL strings.
@@ -175,7 +176,7 @@ type GatewayResponse struct {
 
 // NewEPIC initializes a new EPIC instance. If error is non-nil then
 // the instance shouldn't be used.
-func NewEPIC(epicURL *url.URL, svcAccount string, svcKey string) (EPIC, error) {
+func NewEPIC(epicURL *url.URL, svcAccount string, svcKey string, clientName string) (EPIC, error) {
 	// Use the hostname from the service group, but reset the path.  We
 	// only need the protocol, host, port, credentials, etc.
 	baseURL := *epicURL
@@ -195,7 +196,7 @@ func NewEPIC(epicURL *url.URL, svcAccount string, svcKey string) (EPIC, error) {
 		SetRedirectPolicy(resty.FlexibleRedirectPolicy(2))
 
 	// Initialize the EPIC instance
-	return &epic{http: *r, groupURL: epicURL.String()}, nil
+	return &epic{http: *r, groupURL: epicURL.String(), clientName: clientName}, nil
 }
 
 // GetAccount requests an account from the EPIC.
@@ -247,6 +248,7 @@ func (n *epic) AnnounceGateway(url string, gw gatewayv1a2.Gateway) (GatewayRespo
 			Gateway: Gateway{
 				Spec: GatewaySpec{
 					ClientRef: ClientRef{
+						ClusterID: n.clientName,
 						Namespace: gw.Namespace,
 						Name:      gw.Name,
 						UID:       gateway.GatewayEPICUID(gw),

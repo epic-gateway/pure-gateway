@@ -44,6 +44,8 @@ type SliceResponse struct {
 }
 
 func (n *epic) AnnounceSlice(url string, spec SliceSpec) (*SliceResponse, error) {
+	spec.ClientRef.ClusterID = n.clientName
+
 	response, err := n.http.R().
 		SetBody(SliceCreate{
 			Slice: Slice{
@@ -93,6 +95,8 @@ func (n *epic) FetchSlice(url string) (*SliceResponse, error) {
 }
 
 func (n *epic) UpdateSlice(url string, spec SliceSpec) (*SliceResponse, error) {
+	spec.ClientRef.ClusterID = n.clientName
+
 	response, err := n.http.R().
 		SetBody(SliceCreate{
 			Slice: Slice{
