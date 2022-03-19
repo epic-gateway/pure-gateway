@@ -27,7 +27,7 @@ var (
 )
 
 const (
-	TestHarnessEPIC = "epic-ctl"
+	TestHarnessEPIC = "acndev-ctl"
 	UserNS          = "root"
 	GroupName       = "samplehttp"
 	ServiceAccount  = "user1"

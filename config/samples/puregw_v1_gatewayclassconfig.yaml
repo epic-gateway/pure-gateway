@@ -5,7 +5,7 @@ metadata:
   name: epic-sample
 spec:
   epic:
-    gateway-hostname: epic-ctl
+    gateway-hostname: acndev-ctl
     service-account: user1
     service-key: password1
     user-namespace: root
