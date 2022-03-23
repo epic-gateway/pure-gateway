@@ -131,6 +131,8 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// Announce the Gateway
 	response, err := epic.AnnounceGateway(group.Links["create-proxy"], gw)
 	if err != nil {
+		// Tell the user that something has gone wrong
+		markError(ctx, r.Client, l, &gw, err.Error())
 		return controllers.Done, err
 	}
 
@@ -270,6 +272,40 @@ func markReady(ctx context.Context, cl client.Client, l logr.Logger, gw *gateway
 			Type:  gatewayapi.AddressTypePtr(gatewayv1a2.IPAddressType),
 			Value: publicIP,
 		}}
+
+		// Try to update
+		return cl.Status().Update(ctx, got)
+	})
+}
+
+// markError adds a Status Condition to indicate that we're
+// setting up the Gateway.
+func markError(ctx context.Context, cl client.Client, l logr.Logger, gw *gatewayv1a2.Gateway, message string) error {
+	key := client.ObjectKey{Namespace: gw.GetNamespace(), Name: gw.GetName()}
+
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		// Fetch the resource here; you need to refetch it on every try,
+		// since if you got a conflict on the last update attempt then
+		// you need to get the current version before making your own
+		// changes.
+		if err := cl.Get(ctx, key, gw); err != nil {
+			return err
+		}
+
+		// Use Contour code to add/update the Gateway's Status Condition
+		// to "Ready".
+		gsu := status.GatewayStatusUpdate{
+			FullName:           types.NamespacedName{Namespace: gw.Namespace, Name: gw.Name},
+			Conditions:         make(map[gatewayv1a2.GatewayConditionType]metav1.Condition),
+			ExistingConditions: nil,
+			Generation:         gw.Generation,
+			TransitionTime:     metav1.NewTime(time.Now()),
+		}
+		gsu.AddCondition(gatewayv1a2.GatewayConditionScheduled, metav1.ConditionFalse, status.ReasonValidGateway, message)
+		got, ok := gsu.Mutate(gw).(*gatewayv1a2.Gateway)
+		if !ok {
+			return fmt.Errorf("Failed to mutate Gateway")
+		}
 
 		// Try to update
 		return cl.Status().Update(ctx, got)
