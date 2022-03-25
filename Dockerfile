@@ -24,9 +24,9 @@ ARG GITLAB_TOKEN
 # Install some prerequisites that TrueIngress needs
 RUN apt-get update && apt-get install -y curl libelf1 iproute2
 
-# copy the packet forwarding components from the pfc project
+# Download the packet forwarding components from the true-ingress project
 RUN mkdir -p /opt/acnodal/bin
-RUN curl -L -H "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+RUN curl --silent --show-error -L -H "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
 https://gitlab.com/api/v4/projects/acnodal%2Fepic%2Ftrue-ingress/packages/generic/true-ingress/v0.13.0/true-ingress.tar.bz2 | \
 tar -C /opt/acnodal -xjf -
 
