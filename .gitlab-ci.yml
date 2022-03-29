@@ -24,7 +24,7 @@ stages:
 - apt-get install -y gettext-base
 
 .docker-setup: &docker-setup
-- docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY
+- docker login -u "$PUBLIC_DEPLOY_USER" -p "$PUBLIC_DEPLOY_TOKEN" $CI_REGISTRY
 - mkdir -p ~/.ssh && chmod 700 ~/.ssh
 - ssh-keyscan -H gitlab.com >> ~/.ssh/known_hosts
 
@@ -55,12 +55,7 @@ generate:
 
 build-image:
   stage: build
-  script: |
-    make GOBIN=dontcare VERSION=${TAG_SPECIFIC} docker-build docker-push
-    if [ -n "${CI_COMMIT_TAG}" ] ; then
-      docker login -u "$PUBLIC_DEPLOY_USER" -p "$PUBLIC_DEPLOY_TOKEN" $CI_REGISTRY
-      make GOBIN=dontcare IMAGE_TAG_BASE=registry.gitlab.com/acnodal/public VERSION=${TAG_SPECIFIC} docker-build docker-push
-    fi
+  script: make GOBIN=dontcare VERSION=${TAG_SPECIFIC} docker-build docker-push
 
 k8s-manifest:
   stage: build
@@ -72,10 +67,10 @@ k8s-manifest:
   script: |
     make VERSION=${TAG_SPECIFIC} manifests
     wget --no-verbose --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --method=PUT --body-file=deploy/epic-gateway.yaml "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/manifest/${TAG_SPECIFIC}/epic-gateway.yaml"
+    wget --no-verbose --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --method=PUT --body-file=deploy/epic-gateway-development.yaml "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/manifest/${TAG_SPECIFIC}/epic-gateway-development.yaml"
     if [ -z "${CI_COMMIT_TAG}" ] ; then
       wget --no-verbose --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --method=PUT --body-file=deploy/epic-gateway.yaml "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/manifest/${TAG_LATEST}/epic-gateway.yaml"
     else
-      make IMAGE_TAG_BASE=registry.gitlab.com/acnodal/public VERSION=${TAG_SPECIFIC} manifests
       wget --no-verbose "--http-user=$PUBLIC_DEPLOY_USER" "--http-password=$PUBLIC_DEPLOY_TOKEN" --method=PUT --body-file=deploy/epic-gateway.yaml "${CI_API_V4_URL}/projects/34809193/packages/generic/manifest/${TAG_SPECIFIC}/epic-gateway.yaml"
     fi
 

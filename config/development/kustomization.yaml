@@ -1,0 +1,9 @@
+resources:
+- ../default
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+patchesStrategicMerge:
+- manager-dev-hostaliases.yaml
+- agent-dev-hostaliases.yaml

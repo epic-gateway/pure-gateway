@@ -10,7 +10,7 @@ VERSION ?= v0.0.1-${USER}-dev
 #
 # For example, running 'make bundle-build bundle-push catalog-build catalog-push' will build and push both
 # puregw.io/puregw-bundle:$VERSION and puregw.io/puregw-catalog:$VERSION.
-IMAGE_TAG_BASE ?= registry.gitlab.com/acnodal/epic/gateway
+IMAGE_TAG_BASE ?= registry.gitlab.com/acnodal/public
 
 # Image URL to use all building/pushing image targets
 IMG ?= ${IMAGE_TAG_BASE}/controller:${VERSION}
@@ -57,8 +57,10 @@ manifests: controller-gen kustomize ## Generate WebhookConfiguration, ClusterRol
 	cp config/manager/kustomization.yaml ${CACHE}/kustomization-manager.yaml
 	cd config/agent && $(KUSTOMIZE) edit set image controller=${IMG}
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build config/default | IMG=$(IMG) envsubst > deploy/epic-gateway.yaml
+	$(KUSTOMIZE) build config/default > deploy/epic-gateway.yaml
+	$(KUSTOMIZE) build config/development > deploy/epic-gateway-development.yaml
 	cp deploy/epic-gateway.yaml deploy/epic-gateway-${VERSION}.yaml
+	cp deploy/epic-gateway-development.yaml deploy/epic-gateway-development-${VERSION}.yaml
 # restore kustomization.yaml
 	cp ${CACHE}/kustomization-agent.yaml config/agent/kustomization.yaml
 	cp ${CACHE}/kustomization-manager.yaml config/manager/kustomization.yaml
