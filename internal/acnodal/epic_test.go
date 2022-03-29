@@ -21,7 +21,7 @@ import (
 )
 
 var (
-	Listener80     = gatewayv1a2.Listener{Port: 80}
+	Listener80     = gatewayv1a2.Listener{Port: 80, Protocol: gatewayv1a2.HTTPProtocolType}
 	EndpointPort80 = v1.EndpointPort{Port: 80}
 	EndpointPort81 = v1.EndpointPort{Port: 81}
 )

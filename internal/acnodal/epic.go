@@ -242,6 +242,11 @@ func (n *epic) GetGroup() (GroupResponse, error) {
 // service will belong. name is the service name.  address is a string
 // containing an IP address. ports is a slice of v1.ServicePorts.
 func (n *epic) AnnounceGateway(url string, gw gatewayv1a2.Gateway) (GatewayResponse, error) {
+	ports, err := ListenersToPorts(gw.Spec.Listeners)
+	if err != nil {
+		return GatewayResponse{}, err
+	}
+
 	// send the request
 	response, err := n.http.R().
 		SetBody(GatewayCreate{
@@ -254,7 +259,7 @@ func (n *epic) AnnounceGateway(url string, gw gatewayv1a2.Gateway) (GatewayRespo
 						UID:       gateway.GatewayEPICUID(gw),
 					},
 					DisplayName: gw.Name,
-					Ports:       ListenersToPorts(gw.Spec.Listeners),
+					Ports:       ports,
 				},
 			},
 		}).
@@ -313,12 +318,16 @@ func (n *epic) Delete(url string) error {
 	return nil
 }
 
-func ListenersToPorts(listeners []gatewayv1a2.Listener) []v1.ServicePort {
+// If error is non-nil then one of the input protocols wasn't valid.
+func ListenersToPorts(listeners []gatewayv1a2.Listener) ([]v1.ServicePort, error) {
 	cPorts := make([]v1.ServicePort, len(listeners))
 
 	// Expose the configured ports
 	for i, listener := range listeners {
-		proto := washProtocol(listener.Protocol)
+		proto, err := washProtocol(listener.Protocol)
+		if err != nil {
+			return nil, err
+		}
 		cPorts[i] = v1.ServicePort{
 			Name:     string(listener.Name),
 			Port:     int32(listener.Port),
@@ -326,14 +335,23 @@ func ListenersToPorts(listeners []gatewayv1a2.Listener) []v1.ServicePort {
 		}
 	}
 
-	return cPorts
+	return cPorts, nil
 }
 
-// washProtocol "washes" proto, optionally upcasing if necessary.
-func washProtocol(proto gatewayv1a2.ProtocolType) v1.Protocol {
+// washProtocol "washes" proto, optionally upcasing if necessary. If
+// error is non-nil then the input protocol wasn't valid.
+func washProtocol(proto gatewayv1a2.ProtocolType) (v1.Protocol, error) {
 	upper := strings.ToUpper(string(proto))
-	if upper == "HTTP" {
+	if upper == "HTTP" || upper == "HTTPS" || upper == "TLS" {
 		upper = "TCP"
 	}
-	return v1.Protocol(upper)
+
+	switch upper {
+	case "TCP":
+		return v1.ProtocolTCP, nil
+	case "UDP":
+		return v1.ProtocolUDP, nil
+	default:
+		return v1.ProtocolTCP, fmt.Errorf("Protocol %s is unsupported", proto)
+	}
 }
