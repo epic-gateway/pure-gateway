@@ -23,49 +23,6 @@ import (
 	gatewayapi_v1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
-func TestComputeGatewayClassAcceptedCondition(t *testing.T) {
-	testCases := []struct {
-		name     string
-		accepted bool
-		expect   metav1.Condition
-	}{
-		{
-			name: "valid gatewayclass",
-
-			accepted: true,
-			expect: metav1.Condition{
-				Type:   string(gatewayapi_v1alpha2.GatewayClassConditionStatusAccepted),
-				Status: metav1.ConditionTrue,
-				Reason: reasonValidGatewayClass,
-			},
-		},
-		{
-			name:     "invalid gatewayclass",
-			accepted: false,
-			expect: metav1.Condition{
-				Type:   string(gatewayapi_v1alpha2.GatewayClassConditionStatusAccepted),
-				Status: metav1.ConditionFalse,
-				Reason: reasonInvalidGatewayClass,
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		gc := &gatewayapi_v1alpha2.GatewayClass{
-			ObjectMeta: metav1.ObjectMeta{
-				Generation: 7,
-			},
-		}
-
-		got := computeGatewayClassAcceptedCondition(gc, tc.accepted)
-
-		assert.Equal(t, tc.expect.Type, got.Type)
-		assert.Equal(t, tc.expect.Status, got.Status)
-		assert.Equal(t, tc.expect.Reason, got.Reason)
-		assert.Equal(t, gc.Generation, got.ObservedGeneration)
-	}
-}
-
 func TestConditionChanged(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -193,7 +150,7 @@ func TestMergeConditions(t *testing.T) {
 	fakeClock.SetTime(later)
 
 	for _, tc := range testCases {
-		got := mergeConditions(tc.current, tc.updates...)
+		got := MergeConditions(tc.current, tc.updates...)
 		if conditionChanged(tc.expected[0], got[0]) {
 			assert.Equal(t, tc.expected, got, tc.name)
 		}

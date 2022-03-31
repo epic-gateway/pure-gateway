@@ -8,6 +8,7 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -17,6 +18,28 @@ import (
 
 	"acnodal.io/puregw/controllers"
 	"acnodal.io/puregw/internal/status"
+)
+
+var (
+	accepted metav1.Condition = metav1.Condition{
+		Type:    string(gatewayv1a2.GatewayClassConditionStatusAccepted),
+		Status:  metav1.ConditionTrue,
+		Reason:  "Valid",
+		Message: "EPIC connection succeeded",
+	}
+
+	gwccInvalid metav1.Condition = metav1.Condition{
+		Type:   string(gatewayv1a2.GatewayClassConditionStatusAccepted),
+		Status: metav1.ConditionFalse,
+		Reason: string(gatewayv1a2.GatewayClassReasonInvalidParameters),
+	}
+
+	gwccCantConnect metav1.Condition = metav1.Condition{
+		Type:    string(gatewayv1a2.GatewayClassConditionStatusAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  "Invalid",
+		Message: "Invalid GatewayClassConfig: unable to connect to EPIC: ",
+	}
 )
 
 // GatewayClassReconciler reconciles a GatewayClass object
@@ -60,9 +83,13 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return controllers.Done, client.IgnoreNotFound(err)
 	}
 
+	l.V(1).Info("Reconciling")
+
 	config, err := getEPICConfig(ctx, r.Client, gc.Name)
 	if err != nil {
-		return controllers.Done, err
+		condition := gwccInvalid
+		condition.Message = err.Error()
+		return controllers.Done, markAcceptance(ctx, r.Client, l, &gc, condition)
 	}
 	if config == nil {
 		l.V(1).Info("Not our ControllerName, will ignore")
@@ -74,17 +101,16 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return controllers.Done, err
 	}
 
-	l.V(1).Info("Reconciling")
-
 	// Make a test connection to EPIC to see if this resource and its
 	// GatewayClassConfig work.
-	accepted := false
-	if _, err := epic.GetAccount(); err == nil {
-		accepted = true
+	condition := accepted
+	if _, err := epic.GetAccount(); err != nil {
+		condition = gwccCantConnect
+		condition.Message += err.Error()
 	}
 
 	// Mark this GWC with the result of the test connection.
-	if err := markAcceptance(ctx, r.Client, l, &gc, accepted); err != nil {
+	if err := markAcceptance(ctx, r.Client, l, &gc, condition); err != nil {
 		return controllers.Done, err
 	}
 
@@ -93,7 +119,7 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 // markAcceptance adds a Status Condition to indicate whether we
 // accept or reject this GatewayClass.
-func markAcceptance(ctx context.Context, cl client.Client, l logr.Logger, gc *gatewayv1a2.GatewayClass, accepted bool) error {
+func markAcceptance(ctx context.Context, cl client.Client, l logr.Logger, gc *gatewayv1a2.GatewayClass, accepted metav1.Condition) error {
 	key := client.ObjectKey{Namespace: gc.GetNamespace(), Name: gc.GetName()}
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -105,7 +131,7 @@ func markAcceptance(ctx context.Context, cl client.Client, l logr.Logger, gc *ga
 			return err
 		}
 
-		status.SetGatewayClassAccepted(ctx, cl, gc, accepted)
+		gc.Status.Conditions = status.MergeConditions(gc.Status.Conditions, status.RefreshCondition(&gc.ObjectMeta, accepted))
 
 		// Try to update
 		return cl.Status().Update(ctx, gc)

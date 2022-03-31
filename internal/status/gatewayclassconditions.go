@@ -18,39 +18,20 @@ import (
 
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	gatewayapi_v1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 const reasonValidGatewayClass = "Valid"
 const reasonInvalidGatewayClass = "Invalid"
 
-// computeGatewayClassAcceptedCondition computes the GatewayClass Accepted status condition.
-func computeGatewayClassAcceptedCondition(gatewayClass *gatewayapi_v1alpha2.GatewayClass, accepted bool) metav1.Condition {
-	switch accepted {
-	case true:
-		return metav1.Condition{
-			Type:               string(gatewayapi_v1alpha2.GatewayClassConditionStatusAccepted),
-			Status:             metav1.ConditionTrue,
-			Reason:             "Valid",
-			Message:            "EPIC connection succeeded",
-			ObservedGeneration: gatewayClass.Generation,
-			LastTransitionTime: metav1.NewTime(time.Now()),
-		}
-	default:
-		return metav1.Condition{
-			Type:               string(gatewayapi_v1alpha2.GatewayClassConditionStatusAccepted),
-			Status:             metav1.ConditionFalse,
-			Reason:             "Invalid",
-			Message:            "Invalid GatewayClassConfig: unable to connect to EPIC",
-			ObservedGeneration: gatewayClass.Generation,
-			LastTransitionTime: metav1.NewTime(time.Now()),
-		}
-	}
+func RefreshCondition(meta *metav1.ObjectMeta, condition metav1.Condition) metav1.Condition {
+	condition.ObservedGeneration = meta.Generation
+	condition.LastTransitionTime = metav1.NewTime(time.Now())
+	return condition
 }
 
-// mergeConditions adds or updates matching conditions, and updates the transition
+// MergeConditions adds or updates matching conditions, and updates the transition
 // time if details of a condition have changed. Returns the updated condition array.
-func mergeConditions(conditions []metav1.Condition, updates ...metav1.Condition) []metav1.Condition {
+func MergeConditions(conditions []metav1.Condition, updates ...metav1.Condition) []metav1.Condition {
 	var additions []metav1.Condition
 	for i, update := range updates {
 		add := true

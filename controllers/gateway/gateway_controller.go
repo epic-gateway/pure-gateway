@@ -158,7 +158,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	l.Info("Nudging children", "childCount", len(children))
 	for _, route := range children {
-		if err = gateway.NudgeRoute(ctx, r.Client, l, &route); err != nil {
+		if err = gateway.Nudge(ctx, r.Client, l, &route); err != nil {
 			l.Error(err, "Nudging HTTPRoute", "gateway", gw, "route", route)
 		}
 	}
@@ -185,7 +185,7 @@ func getEPICConfig(ctx context.Context, cl client.Client, gatewayClassName strin
 	}
 	gwc := epicgwv1.GatewayClassConfig{}
 	if err := cl.Get(ctx, gwcName, &gwc); err != nil {
-		return nil, fmt.Errorf("Unable to get GatewayClassConfig %s", gc.Spec.ParametersRef.Name)
+		return nil, fmt.Errorf("Unable to get GatewayClassConfig %s", gwcName)
 	}
 
 	return &gwc, nil

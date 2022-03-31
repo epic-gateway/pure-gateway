@@ -74,8 +74,15 @@ func (gccs *GatewayClassConfigSpec) EPICAPIServiceURL() (*url.URL, error) {
 
 // GatewayClassConfigStatus defines the observed state of GatewayClassConfig
 type GatewayClassConfigStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Conditions is the current status from the controller for
+	// this GatewayClassConfig.
+	//
+	// +optional
+	// +listType=map
+	// +listMapKey=type
+	// +kubebuilder:validation:MaxItems=8
+	// +kubebuilder:default={{type: "Accepted", status: "Unknown", message: "Waiting for controller", reason: "Waiting", lastTransitionTime: "1970-01-01T00:00:00Z"}}
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 //+kubebuilder:object:root=true

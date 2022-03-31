@@ -24,6 +24,7 @@ import (
 	epicgwv1 "acnodal.io/puregw/apis/puregw/v1"
 	discoverycontrollers "acnodal.io/puregw/controllers/discovery"
 	gatewaycontrollers "acnodal.io/puregw/controllers/gateway"
+	puregwcontrollers "acnodal.io/puregw/controllers/puregw"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -95,6 +96,13 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "HTTPRoute")
+		os.Exit(1)
+	}
+	if err = (&puregwcontrollers.GatewayClassConfigReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "GatewayClassConfig")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

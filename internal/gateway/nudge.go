@@ -9,12 +9,11 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
-// NudgeRoute "nudges" route, i.e., causes its reconciler to fire, by
+// Nudge "nudges" nudgee, i.e., causes its reconciler to fire, by
 // adding a random annotation.
-func NudgeRoute(ctx context.Context, cl client.Client, l logr.Logger, route *gatewayv1a2.HTTPRoute) error {
+func Nudge(ctx context.Context, cl client.Client, l logr.Logger, nudgee client.Object) error {
 	var (
 		err        error
 		patch      []map[string]interface{}
@@ -25,7 +24,7 @@ func NudgeRoute(ctx context.Context, cl client.Client, l logr.Logger, route *gat
 	_, _ = rand.Read(raw)
 
 	// Prepare the patch with the new annotation.
-	if route.Annotations == nil {
+	if nudgee.GetAnnotations() == nil {
 		// If this is the first annotation then we need to wrap it in a
 		// JSON object
 		patch = []map[string]interface{}{{
@@ -46,11 +45,11 @@ func NudgeRoute(ctx context.Context, cl client.Client, l logr.Logger, route *gat
 	if patchBytes, err = json.Marshal(patch); err != nil {
 		return err
 	}
-	if err := cl.Patch(ctx, route, client.RawPatch(types.JSONPatchType, patchBytes)); err != nil {
-		l.Error(err, "patching", "route", route)
+	if err := cl.Patch(ctx, nudgee, client.RawPatch(types.JSONPatchType, patchBytes)); err != nil {
+		l.Error(err, "patching", "route", nudgee)
 		return err
 	}
-	l.Info("patched", "route", route)
+	l.Info("patched", "route", nudgee)
 
 	return nil
 }
