@@ -179,7 +179,7 @@ func getEPICConfig(ctx context.Context, cl client.Client, gatewayClassName strin
 	}
 
 	// Get the PureGW GatewayClassConfig referred to by the GatewayClass
-	gwcName := types.NamespacedName{Name: string(gc.Spec.ParametersRef.Name)}
+	gwcName := types.NamespacedName{Namespace: "default", Name: string(gc.Spec.ParametersRef.Name)}
 	if gc.Spec.ParametersRef.Namespace != nil {
 		gwcName.Namespace = string(*gc.Spec.ParametersRef.Namespace)
 	}
