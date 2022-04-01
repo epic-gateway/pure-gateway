@@ -113,6 +113,9 @@ type GatewaySpec struct {
 	// is the IP address of the EPIC node and the value is a
 	// TunnelEndpoint.
 	TunnelEndpoints map[string]EndpointMap `json:"gue-tunnel-endpoints"`
+
+	// Endpoints holds the proxy's DNS records.
+	Endpoints []*DNSEndpoint `json:"endpoints,omitempty"`
 }
 
 // EndpointMap contains a map of the EPIC endpoints that connect
