@@ -5,6 +5,7 @@ metadata:
   name: epic-sample
 spec:
   epic:
+    cluster-name: epic-sample
     gateway-hostname: acndev-ctl
     service-account: user1
     service-key: password1

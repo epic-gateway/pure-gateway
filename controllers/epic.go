@@ -28,7 +28,7 @@ func ConnectToEPIC(ctx context.Context, cl client.Client, namespace *string, nam
 	if err != nil {
 		return nil, err
 	}
-	return acnodal.NewEPIC(epicURL, gcc.Spec.EPIC.SvcAccount, gcc.Spec.EPIC.SvcKey, gcc.Spec.EPIC.ClientName)
+	return acnodal.NewEPIC(epicURL, gcc.Spec.EPIC.SvcAccount, gcc.Spec.EPIC.SvcKey, gcc.Spec.EPIC.ClusterName)
 }
 
 func SplitNSName(name string) (*types.NamespacedName, error) {

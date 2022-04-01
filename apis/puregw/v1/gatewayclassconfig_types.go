@@ -15,11 +15,11 @@ import (
 // EPIC configures the allocator to work with the Acnodal Enterprise
 // Gateway.
 type EPIC struct {
-	// ClientName is used to tag resources on the EPIC server. It's
+	// ClusterName is used to tag resources on the EPIC server. It's
 	// purely informative but it's helpful to have each client cluster
 	// have a different name.
 	// +kubebuilder:default="epic-gateway"
-	ClientName string `json:"client-name,omitempty"`
+	ClusterName string `json:"cluster-name,omitempty"`
 
 	Host       string `json:"gateway-hostname"`
 	SvcAccount string `json:"service-account"`
