@@ -1,9 +1,9 @@
 # VERSION defines the project version for the bundle.
 # Update this value when you upgrade the version of your project.
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
-# - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
-# - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
-VERSION ?= v0.0.1-${USER}-dev
+# - use the VERSION as arg of the bundle target (e.g make bundle VERSION=v0.0.2)
+# - use environment variables to overwrite this value (e.g export VERSION=v0.0.2)
+VERSION ?= v0.0.0-${USER}-dev
 
 # IMAGE_TAG_BASE defines the docker.io namespace and part of the image name for remote images.
 # This variable is used to construct full image tags for bundle and catalog images.
