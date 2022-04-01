@@ -202,6 +202,15 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			return controllers.TryAgain, nil
 		} else {
 			l.Info("Previously announced, will update", "link", link)
+
+			// Announce the Slices that the Route references. We do this
+			// first so the slices will be in place when the route is
+			// announced. The slices need the route to be able to allocate
+			// tunnel IDs.
+			if err := announceSlices(ctx, r.Client, l, account.Links["create-slice"], epic, config.NamespacedName().String(), &route); err != nil {
+				return controllers.Done, err
+			}
+
 			// Update the Route.
 			_, err := epic.UpdateRoute(link,
 				acnodal.RouteSpec{
@@ -287,7 +296,7 @@ func announceSlices(ctx context.Context, cl client.Client, l logr.Logger, sliceU
 		// again. We don't need to update slices - the slice controller
 		// will take care of that.
 		if hasBeen, _ := hasBeenAnnounced(ctx, cl, slice); hasBeen {
-			l.Info("Slice previously announced", "slice", slice.Name)
+			l.Info("Slice previously announced", "slice", slice.Namespace+"/"+slice.Name)
 			continue
 		}
 
@@ -340,7 +349,7 @@ func announceSlices(ctx context.Context, cl client.Client, l logr.Logger, sliceU
 			l.Error(err, "adding EPIC link to slice")
 			continue
 		}
-		l.Info("Slice announced", "epic-link", slice.Annotations[epicgwv1.EPICLinkAnnotation])
+		l.Info("Slice announced", "epic-link", sliceResp.Links["self"], "slice", slice.Namespace+"/"+slice.Name)
 	}
 
 	return nil
