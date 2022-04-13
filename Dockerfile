@@ -30,7 +30,7 @@ RUN apt-get install -y tcpdump
 # Download the packet forwarding components from the true-ingress project
 RUN mkdir -p /opt/acnodal/bin
 RUN curl --silent --show-error -L -H "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
-https://gitlab.com/api/v4/projects/acnodal%2Fepic%2Ftrue-ingress/packages/generic/true-ingress/v0.13.0/true-ingress.tar.bz2 | \
+https://gitlab.com/api/v4/projects/acnodal%2Fepic%2Ftrue-ingress/packages/generic/true-ingress/v0.16.0/true-ingress.tar.bz2 | \
 tar -C /opt/acnodal -xjf -
 
 WORKDIR /
