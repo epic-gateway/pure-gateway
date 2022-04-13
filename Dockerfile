@@ -24,6 +24,9 @@ ARG GITLAB_TOKEN
 # Install some prerequisites that TrueIngress needs
 RUN apt-get update && apt-get install -y curl libelf1 iproute2
 
+# tcpdump is useful for debugging
+RUN apt-get install -y tcpdump
+
 # Download the packet forwarding components from the true-ingress project
 RUN mkdir -p /opt/acnodal/bin
 RUN curl --silent --show-error -L -H "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
