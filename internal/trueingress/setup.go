@@ -73,7 +73,7 @@ func addFilter(l logr.Logger, nic string, function string, direction string) err
 }
 
 func configureTrueIngress(l logr.Logger, nic string, qid int, flags int) error {
-	return runScript(l, fmt.Sprintf("/opt/acnodal/bin/cli_cfg set %[1]s %[2]d %[3]d \"%[1]s rx\"", nic, qid, flags))
+	return runScript(l, fmt.Sprintf("/opt/acnodal/bin/cli_cfg set %[1]s %[2]d %[3]d %[1]s", nic, qid, flags))
 }
 
 // SetTunnel sets the parameters needed by one PFC tunnel.
