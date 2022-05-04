@@ -9,11 +9,14 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"github.com/vishvananda/netlink"
+	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -38,6 +41,7 @@ func (r *HTTPRouteAgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
+//+kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways/finalizers,verbs=update
@@ -122,7 +126,11 @@ func (r *HTTPRouteAgentReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return controllers.TryAgain, nil
 	}
 	l.Info("Referenced slices", "slices", slices)
-	incomplete, err = setupTunnels(l, &gw, *config.Spec.TrueIngress, slices, epic)
+	isEKS, err := eksCluster(ctx, r.Client)
+	if err != nil {
+		return controllers.Done, err
+	}
+	incomplete, err = setupTunnels(l, &gw, *config.Spec.TrueIngress, slices, epic, isEKS)
 	if incomplete {
 		return controllers.TryAgain, nil
 	}
@@ -134,7 +142,7 @@ func (r *HTTPRouteAgentReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	return controllers.TryAgainLater, nil
 }
 
-func setupTunnels(l logr.Logger, gw *gatewayv1a2.Gateway, spec epicgwv1.TrueIngress, slices []*discoveryv1.EndpointSlice, epic acnodal.EPIC) (incomplete bool, err error) {
+func setupTunnels(l logr.Logger, gw *gatewayv1a2.Gateway, spec epicgwv1.TrueIngress, slices []*discoveryv1.EndpointSlice, epic acnodal.EPIC, isEKS bool) (incomplete bool, err error) {
 	// Get the service that owns this endpoint. This endpoint
 	// will either re-use an existing tunnel or set up a new one
 	// for this node. Tunnels belong to the service.
@@ -166,7 +174,7 @@ func setupTunnels(l logr.Logger, gw *gatewayv1a2.Gateway, spec epicgwv1.TrueIngr
 				// Now that we've got the service response we have enough
 				// info to set up this tunnel.
 				for _, myTunnel := range myTunnels.EPICEndpoints {
-					err = setupTunnel(l, spec, address, myTunnel, svcResponse.Gateway.Spec.TunnelKey)
+					err = setupTunnel(l, spec, address, myTunnel, svcResponse.Gateway.Spec.TunnelKey, isEKS)
 					if err != nil {
 						l.Error(err, "SetupPFC")
 					}
@@ -180,13 +188,25 @@ func setupTunnels(l logr.Logger, gw *gatewayv1a2.Gateway, spec epicgwv1.TrueIngr
 
 // setupTunnel sets up the Acnodal PFC components and GUE tunnel to
 // communicate with the Acnodal EPIC.
-func setupTunnel(l logr.Logger, spec epicgwv1.TrueIngress, clientAddress string, epicEndpoint acnodal.TunnelEndpoint, tunnelAuth string) error {
+func setupTunnel(l logr.Logger, spec epicgwv1.TrueIngress, clientAddress string, epicEndpoint acnodal.TunnelEndpoint, tunnelAuth string, isEKS bool) error {
 	// Determine the interface to which to attach the Encap PFC
 	encapIntf, err := interfaceOrDefault(spec.EncapAttachment.Interface, clientAddress)
 	if err != nil {
 		return err
 	}
 	ti.SetupNIC(l, encapIntf.Attrs().Name, "encap", spec.EncapAttachment.Direction, spec.EncapAttachment.QID, spec.EncapAttachment.Flags)
+
+	// In a cluster running the Amazon VPC CNI we need to attach the
+	// encapper to all of the ENI interfaces, not just the default.
+	if isEKS {
+		eniInts, err := ti.AmazonENIInterfaces("eth[1-9]")
+		if err != nil {
+			return err
+		}
+		for _, eni := range eniInts {
+			ti.SetupNIC(l, eni.Name, "encap", spec.EncapAttachment.Direction, spec.EncapAttachment.QID, spec.EncapAttachment.Flags)
+		}
+	}
 
 	// Determine the interface to which to attach the Decap PFC
 	decapIntf, err := interfaceOrDefault(spec.DecapAttachment.Interface, clientAddress)
@@ -234,4 +254,23 @@ func interfaceOrDefault(intName string, address string) (netlink.Link, error) {
 	}
 
 	return netlink.LinkByName(intName)
+}
+
+// providerID returns this cluster's cloud provider ID.
+func providerID(ctx context.Context, cl client.Client) (string, error) {
+	node := corev1.Node{}
+	if err := cl.Get(ctx, types.NamespacedName{Namespace: "", Name: os.Getenv("EPIC_NODE_NAME")}, &node); err != nil {
+		return "", err
+	}
+	return node.Spec.ProviderID, nil
+}
+
+// eksCluster returns true if this is an AWS EKS cluster, based on
+// this node's spec.providerID.
+func eksCluster(ctx context.Context, cl client.Client) (bool, error) {
+	providerID, err := providerID(ctx, cl)
+	if err != nil {
+		return false, err
+	}
+	return strings.HasPrefix(providerID, "aws:"), nil
 }

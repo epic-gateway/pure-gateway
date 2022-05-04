@@ -7,6 +7,7 @@ package trueingress
 import (
 	"fmt"
 	"net"
+	"regexp"
 
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
@@ -182,4 +183,29 @@ func addVirtualInt(lbIP net.IP, link netlink.Link, subnet, aggregation string) e
 	}
 
 	return nil
+}
+
+// AmazonENIInterfaces returns a slice containing this node's ENI
+// network interfaces.
+func AmazonENIInterfaces(pattern string) ([]net.Interface, error) {
+	enis := []net.Interface{}
+
+	// Scan for ENI interfaces.
+	regex, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, fmt.Errorf("error compiling regex \"%s\": %s", pattern, err.Error())
+	}
+
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, intf := range interfaces {
+		if regex.Match([]byte(intf.Name)) {
+			enis = append(enis, intf)
+		}
+	}
+
+	return enis, nil
 }
