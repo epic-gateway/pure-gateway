@@ -7,6 +7,10 @@ import (
 	"github.com/go-logr/logr"
 )
 
+const (
+	ExplicitPacketForward int = 4
+)
+
 // runProgram is a little helper that runs a program and logs what's
 // being run. If the result is non-zero then it logs the error, too.
 func runProgram(l logr.Logger, program string, args ...string) error {
@@ -48,7 +52,7 @@ func CleanupFilter(l logr.Logger, nic string, direction string) error {
 // SetupNIC adds the PFC components to nic. direction should be either
 // "ingress" or "egress". qid should be 0 or 1. flags is typically
 // either 8 or 9 where 9 adds debug logging.
-func SetupNIC(l logr.Logger, nic string, function string, direction string, qid int, flags int) error {
+func SetupNIC(l logr.Logger, nic string, function string, direction string, qid int, flags int, name string) error {
 
 	// tc qdisc add dev nic clsact
 	addQueueDiscipline(l, nic)
@@ -57,7 +61,7 @@ func SetupNIC(l logr.Logger, nic string, function string, direction string, qid 
 	addFilter(l, nic, function, direction)
 
 	// ./cli_cfg set nic 0 0 9 "nic rx"
-	configureTrueIngress(l, nic, qid, flags)
+	configureTrueIngress(l, nic, qid, flags, name)
 
 	return nil
 }
@@ -72,8 +76,8 @@ func addFilter(l logr.Logger, nic string, function string, direction string) err
 	return runScript(l, fmt.Sprintf("/usr/sbin/tc filter show dev %[1]s %[3]s | /usr/bin/grep pfc_%[2]s_tc || /usr/sbin/tc filter add dev %[1]s %[3]s bpf direct-action object-file /opt/acnodal/bin/pfc_%[2]s_tc.o sec .text", nic, function, direction))
 }
 
-func configureTrueIngress(l logr.Logger, nic string, qid int, flags int) error {
-	return runScript(l, fmt.Sprintf("/opt/acnodal/bin/cli_cfg set %[1]s %[2]d %[3]d %[1]s", nic, qid, flags))
+func configureTrueIngress(l logr.Logger, nic string, qid int, flags int, name string) error {
+	return runScript(l, fmt.Sprintf("/opt/acnodal/bin/cli_cfg set %[1]s %[2]d %[3]d %[4]s", nic, qid, flags, name))
 }
 
 // SetTunnel sets the parameters needed by one PFC tunnel.
