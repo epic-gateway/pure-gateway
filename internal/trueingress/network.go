@@ -9,6 +9,7 @@ import (
 	"net"
 	"regexp"
 
+	"github.com/go-logr/logr"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
 )
@@ -208,4 +209,41 @@ func AmazonENIInterfaces(pattern string) ([]net.Interface, error) {
 	}
 
 	return enis, nil
+}
+
+func ResetNetworking(l logr.Logger, encapName string, decapName string) error {
+	// We want to ensure that we load the PFC filter programs and
+	// maps. Filters survive a pod restart, but maps don't, so we delete
+	// the filters so they'll get reloaded during tunnel setup which
+	// will implicitly create the maps.
+
+	// Cleanup any explicitly-specified interfaces (i.e., not "default")
+	if encapName != "default" {
+		cleanupFilter(l, encapName, "ingress")
+		cleanupFilter(l, encapName, "egress")
+		cleanupQueueDiscipline(l, encapName)
+	}
+	if decapName != "default" {
+		cleanupFilter(l, decapName, "ingress")
+		cleanupFilter(l, decapName, "egress")
+		cleanupQueueDiscipline(l, decapName)
+	}
+
+	// Clean up the default interfaces, too
+	default4, err := DefaultInterface(nl.FAMILY_V4)
+	if err == nil {
+		cleanupFilter(l, default4.Attrs().Name, "ingress")
+		cleanupFilter(l, default4.Attrs().Name, "egress")
+		cleanupQueueDiscipline(l, default4.Attrs().Name)
+	} else {
+		l.Error(err, "Determining local interface")
+	}
+	default6, err := DefaultInterface(nl.FAMILY_V6)
+	if err == nil && default6 != nil {
+		cleanupFilter(l, default6.Attrs().Name, "ingress")
+		cleanupFilter(l, default6.Attrs().Name, "egress")
+		cleanupQueueDiscipline(l, default6.Attrs().Name)
+	}
+
+	return nil
 }

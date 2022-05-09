@@ -31,19 +31,19 @@ func runScript(l logr.Logger, script string) error {
 	return runProgram(l, "/bin/sh", "-c", script)
 }
 
-// CleanupQueueDiscipline removes our qdisc from the specified nic. It's useful
+// cleanupQueueDiscipline removes our qdisc from the specified nic. It's useful
 // for forcing SetBalancer to reload the filters which also
 // initializes the maps.
-func CleanupQueueDiscipline(l logr.Logger, nic string) error {
+func cleanupQueueDiscipline(l logr.Logger, nic string) error {
 	// remove the clsact qdisc from the nic if it's there
 	// tc qdisc del dev cni0 clsact
 	return runScript(l, fmt.Sprintf("/usr/sbin/tc qdisc list dev %[1]s clsact | /usr/bin/grep clsact && /usr/sbin/tc qdisc del dev %[1]s clsact || true", nic))
 }
 
-// CleanupFilter removes our filters from the specified nic. It's useful
+// cleanupFilter removes our filters from the specified nic. It's useful
 // for forcing SetBalancer to reload the filters which also
 // initializes the maps.
-func CleanupFilter(l logr.Logger, nic string, direction string) error {
+func cleanupFilter(l logr.Logger, nic string, direction string) error {
 	// add the pfc_{encap|decap}_tc filter to the nic if it's not already there
 	// tc filter del dev cni0 egress
 	return runScript(l, fmt.Sprintf("/usr/sbin/tc filter show dev %[1]s %[2]s | /usr/bin/grep 'pfc_encap_tc\\|pfc_decap_tc' && /usr/sbin/tc filter del dev %[1]s %[2]s || true", nic, direction))

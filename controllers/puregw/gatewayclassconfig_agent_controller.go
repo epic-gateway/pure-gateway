@@ -7,8 +7,6 @@ package puregw
 import (
 	"context"
 
-	"github.com/go-logr/logr"
-	"github.com/vishvananda/netlink/nl"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -63,44 +61,7 @@ func (r *GatewayClassConfigAgentReconciler) Reconcile(ctx context.Context, req c
 	l.V(1).Info("Reconciling")
 
 	// Clean up to ensure that we re-load the TrueIngress components
-	resetNetworking(l, gwc.Spec.TrueIngress.EncapAttachment.Interface, gwc.Spec.TrueIngress.DecapAttachment.Interface)
+	ti.ResetNetworking(l, gwc.Spec.TrueIngress.EncapAttachment.Interface, gwc.Spec.TrueIngress.DecapAttachment.Interface)
 
 	return controllers.Done, nil
-}
-
-func resetNetworking(l logr.Logger, encapName string, decapName string) error {
-	// We want to ensure that we load the PFC filter programs and
-	// maps. Filters survive a pod restart, but maps don't, so we delete
-	// the filters so they'll get reloaded during tunnel setup which
-	// will implicitly create the maps.
-
-	// Cleanup any explicitly-specified interfaces (i.e., not "default")
-	if encapName != "default" {
-		ti.CleanupFilter(l, encapName, "ingress")
-		ti.CleanupFilter(l, encapName, "egress")
-		ti.CleanupQueueDiscipline(l, encapName)
-	}
-	if decapName != "default" {
-		ti.CleanupFilter(l, decapName, "ingress")
-		ti.CleanupFilter(l, decapName, "egress")
-		ti.CleanupQueueDiscipline(l, decapName)
-	}
-
-	// Clean up the default interfaces, too
-	default4, err := ti.DefaultInterface(nl.FAMILY_V4)
-	if err == nil {
-		ti.CleanupFilter(l, default4.Attrs().Name, "ingress")
-		ti.CleanupFilter(l, default4.Attrs().Name, "egress")
-		ti.CleanupQueueDiscipline(l, default4.Attrs().Name)
-	} else {
-		l.Error(err, "Determining local interface")
-	}
-	default6, err := ti.DefaultInterface(nl.FAMILY_V6)
-	if err == nil && default6 != nil {
-		ti.CleanupFilter(l, default6.Attrs().Name, "ingress")
-		ti.CleanupFilter(l, default6.Attrs().Name, "egress")
-		ti.CleanupQueueDiscipline(l, default6.Attrs().Name)
-	}
-
-	return nil
 }
