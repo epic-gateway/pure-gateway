@@ -61,7 +61,7 @@ spec:
           periodSeconds: 10
       hostNetwork: true
       serviceAccountName: controller-manager
-      terminationGracePeriodSeconds: 2
+      terminationGracePeriodSeconds: 5
       tolerations:
       - effect: NoSchedule
         key: node-role.kubernetes.io/master

@@ -16,7 +16,7 @@ func AddFinalizer(ctx context.Context, cl client.Client, obj client.Object, fina
 	if !controllerutil.ContainsFinalizer(obj, finalizerName) {
 		key := client.ObjectKey{Namespace: obj.GetNamespace(), Name: obj.GetName()}
 
-		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 			// Fetch the resource here; you need to refetch it on every try,
 			// since if you got a conflict on the last update attempt then
 			// you need to get the current version before making your own
@@ -47,7 +47,7 @@ func RemoveFinalizer(ctx context.Context, cl client.Client, obj client.Object, f
 	if controllerutil.ContainsFinalizer(obj, finalizerName) {
 		key := client.ObjectKey{Namespace: obj.GetNamespace(), Name: obj.GetName()}
 
-		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 			// Fetch the resource here; you need to refetch it on every try,
 			// since if you got a conflict on the last update attempt then
 			// you need to get the current version before making your own
