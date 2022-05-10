@@ -5,6 +5,7 @@ Copyright 2022 Acnodal.
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 
@@ -56,6 +57,7 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	setupLog.Info("Hello there!")
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
@@ -77,10 +79,11 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "GatewayClass")
 		os.Exit(1)
 	}
-	if err = (&gatewaycontrollers.GatewayReconciler{
+	gwReconciler := gatewaycontrollers.GatewayReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+	}
+	if err = gwReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Gateway")
 		os.Exit(1)
 	}
@@ -91,10 +94,11 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "EndpointSlice")
 		os.Exit(1)
 	}
-	if err = (&gatewaycontrollers.HTTPRouteReconciler{
+	routeReconciler := gatewaycontrollers.HTTPRouteReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+	}
+	if err = routeReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "HTTPRoute")
 		os.Exit(1)
 	}
@@ -121,4 +125,16 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+
+	setupLog.Info("cleaning up finalizers")
+	ctx := context.Background()
+	if err := routeReconciler.Cleanup(setupLog, ctx); err != nil {
+		setupLog.Error(err, "unable to clean up HTTPRouteReconciler")
+	}
+	if err := gwReconciler.Cleanup(setupLog, ctx); err != nil {
+		setupLog.Error(err, "unable to clean up GatewayReconciler")
+	}
+
+	setupLog.Info("exiting")
+	os.Exit(0)
 }

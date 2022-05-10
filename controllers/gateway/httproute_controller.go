@@ -272,6 +272,21 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	return controllers.Done, nil
 }
 
+// Cleanup removes our finalizer from all of the HTTPRoutes in the
+// system.
+func (r *HTTPRouteReconciler) Cleanup(l logr.Logger, ctx context.Context) error {
+	routeList := gatewayv1a2.HTTPRouteList{}
+	if err := r.Client.List(ctx, &routeList); err != nil {
+		return err
+	}
+	for _, route := range routeList.Items {
+		if err := controllers.RemoveFinalizer(ctx, r.Client, &route, controllers.FinalizerName); err != nil {
+			l.Error(err, "removing Finalizer")
+		}
+	}
+	return nil
+}
+
 // announceSlices announces the slices that this HTTPRoute
 // references.If the error return value is non-nil them something has
 // gone wrong.

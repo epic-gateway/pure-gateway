@@ -104,6 +104,12 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return controllers.Done, nil
 	}
 
+	// The resource is not being deleted, and it's our GWClass, so add
+	// our finalizer.
+	if err := controllers.AddFinalizer(ctx, r.Client, &gw, controllers.FinalizerName); err != nil {
+		return controllers.Done, err
+	}
+
 	// See if we've already announced this resource.
 	link, announced := gw.Annotations[epicgwv1.EPICLinkAnnotation]
 	if announced {
@@ -112,12 +118,6 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	l.V(1).Info("Reconciling")
-
-	// The resource is not being deleted, and it's our GWClass, so add
-	// our finalizer.
-	if err := controllers.AddFinalizer(ctx, r.Client, &gw, finalizerName); err != nil {
-		return controllers.Done, err
-	}
 
 	// Get the EPIC ServiceGroup
 	group, err := epic.GetGroup()
@@ -161,6 +161,21 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	return controllers.Done, nil
+}
+
+// Cleanup removes our finalizer from all of the Gateways in the
+// system.
+func (r *GatewayReconciler) Cleanup(l logr.Logger, ctx context.Context) error {
+	gwList := gatewayv1a2.GatewayList{}
+	if err := r.Client.List(ctx, &gwList); err != nil {
+		return err
+	}
+	for _, route := range gwList.Items {
+		if err := controllers.RemoveFinalizer(ctx, r.Client, &route, controllers.FinalizerName); err != nil {
+			l.Error(err, "removing Finalizer")
+		}
+	}
+	return nil
 }
 
 func getEPICConfig(ctx context.Context, cl client.Client, gatewayClassName string) (*epicgwv1.GatewayClassConfig, error) {
