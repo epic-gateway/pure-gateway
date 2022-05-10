@@ -12,9 +12,6 @@ spec:
       control-plane: controller-agent
   template:
     metadata:
-      annotations:
-        prometheus.io/port: '7472'
-        prometheus.io/scrape: 'true'
       labels:
         control-plane: controller-agent
     spec:
@@ -33,9 +30,6 @@ spec:
               fieldPath: status.hostIP
         image: controller:latest
         imagePullPolicy: Always
-        ports:
-        - containerPort: 7472
-          name: monitoring
         securityContext:
           privileged: true
           allowPrivilegeEscalation: true
