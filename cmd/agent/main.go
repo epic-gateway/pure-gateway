@@ -23,6 +23,8 @@ import (
 	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	epicgwv1 "acnodal.io/puregw/apis/puregw/v1"
+	ti "acnodal.io/puregw/internal/trueingress"
+
 	gatewaycontrollers "acnodal.io/puregw/controllers/gateway"
 	puregwcontrollers "acnodal.io/puregw/controllers/puregw"
 	//+kubebuilder:scaffold:imports
@@ -98,9 +100,22 @@ func main() {
 		os.Exit(1)
 	}
 
+	// This is a kludge. The proper time to remove the filters is when
+	// we exit, which we also do, but we didn't always do.
+	setupLog.Info("removing BPF filters")
+	ti.RemoveFilters(setupLog, "default", "default")
+
 	setupLog.Info("starting agent")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running agent")
 		os.Exit(1)
 	}
+
+	// Our filters are pretty lightweight but it's polite to remove them
+	// so they don't waste CPU.
+	setupLog.Info("removing BPF filters")
+	ti.RemoveFilters(setupLog, "default", "default")
+
+	setupLog.Info("exiting")
+	os.Exit(0)
 }

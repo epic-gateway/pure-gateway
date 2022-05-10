@@ -14,6 +14,16 @@ import (
 	"github.com/vishvananda/netlink/nl"
 )
 
+const (
+	// ENINamePattern identifies AWS ENI interfaces. This pattern
+	// doesn't match eth0 because that's the default ENI so it gets set
+	// up by default. This pattern catches the other ENI
+	// interfaces. Note that non-EKS systems might also have an eth1 so
+	// you need to ensure that you're running on an EKS cluster before
+	// using this pattern.
+	ENINamePattern string = "eth[1-9]"
+)
+
 // AddrFamily returns whether lbIP is an IPV4 or IPV6 address.  The
 // return value will be nl.FAMILY_V6 if the address is an IPV6
 // address, nl.FAMILY_V4 if it's IPV4, or 0 if the family can't be
@@ -188,13 +198,13 @@ func addVirtualInt(lbIP net.IP, link netlink.Link, subnet, aggregation string) e
 
 // AmazonENIInterfaces returns a slice containing this node's ENI
 // network interfaces.
-func AmazonENIInterfaces(pattern string) ([]net.Interface, error) {
+func AmazonENIInterfaces() ([]net.Interface, error) {
 	enis := []net.Interface{}
 
 	// Scan for ENI interfaces.
-	regex, err := regexp.Compile(pattern)
+	regex, err := regexp.Compile(ENINamePattern)
 	if err != nil {
-		return nil, fmt.Errorf("error compiling regex \"%s\": %s", pattern, err.Error())
+		return nil, fmt.Errorf("error compiling regex \"%s\": %s", ENINamePattern, err.Error())
 	}
 
 	interfaces, err := net.Interfaces()
@@ -211,39 +221,48 @@ func AmazonENIInterfaces(pattern string) ([]net.Interface, error) {
 	return enis, nil
 }
 
-func ResetNetworking(l logr.Logger, encapName string, decapName string) error {
-	// We want to ensure that we load the PFC filter programs and
-	// maps. Filters survive a pod restart, but maps don't, so we delete
-	// the filters so they'll get reloaded during tunnel setup which
-	// will implicitly create the maps.
-
+// RemoveFilters deletes our filters from the specified interface, the
+// default interface, and any ENI interfaces that we can find.  We
+// want to ensure that we load the PFC filter programs and
+// maps. Filters survive a pod restart, but maps don't, so we delete
+// the filters so they'll get reloaded during tunnel setup which will
+// implicitly create the maps.
+func RemoveFilters(l logr.Logger, encapName string, decapName string) error {
 	// Cleanup any explicitly-specified interfaces (i.e., not "default")
 	if encapName != "default" {
-		cleanupFilter(l, encapName, "ingress")
-		cleanupFilter(l, encapName, "egress")
-		cleanupQueueDiscipline(l, encapName)
+		unfilterInterface(l, encapName)
 	}
 	if decapName != "default" {
-		cleanupFilter(l, decapName, "ingress")
-		cleanupFilter(l, decapName, "egress")
-		cleanupQueueDiscipline(l, decapName)
+		unfilterInterface(l, decapName)
 	}
 
 	// Clean up the default interfaces, too
 	default4, err := DefaultInterface(nl.FAMILY_V4)
 	if err == nil {
-		cleanupFilter(l, default4.Attrs().Name, "ingress")
-		cleanupFilter(l, default4.Attrs().Name, "egress")
-		cleanupQueueDiscipline(l, default4.Attrs().Name)
+		unfilterInterface(l, default4.Attrs().Name)
 	} else {
 		l.Error(err, "Determining local interface")
 	}
 	default6, err := DefaultInterface(nl.FAMILY_V6)
 	if err == nil && default6 != nil {
-		cleanupFilter(l, default6.Attrs().Name, "ingress")
-		cleanupFilter(l, default6.Attrs().Name, "egress")
-		cleanupQueueDiscipline(l, default6.Attrs().Name)
+		unfilterInterface(l, default6.Attrs().Name)
+	}
+
+	// Clean up any ENIs, too.
+	enis, err := AmazonENIInterfaces()
+	if err != nil {
+		return err
+	}
+	for _, eni := range enis {
+		unfilterInterface(l, eni.Name)
 	}
 
 	return nil
+}
+
+// unfilterInterface removes our BPF filters from an interface
+func unfilterInterface(l logr.Logger, intfName string) {
+	cleanupFilter(l, intfName, "ingress")
+	cleanupFilter(l, intfName, "egress")
+	cleanupQueueDiscipline(l, intfName)
 }

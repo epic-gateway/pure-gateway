@@ -199,7 +199,7 @@ func setupTunnel(l logr.Logger, spec epicgwv1.TrueIngress, clientAddress string,
 	// In a cluster running the Amazon VPC CNI we need to attach the
 	// encapper to all of the ENI interfaces, not just the default.
 	if isEKS {
-		eniInts, err := ti.AmazonENIInterfaces("eth[1-9]")
+		eniInts, err := ti.AmazonENIInterfaces()
 		if err != nil {
 			return err
 		}
