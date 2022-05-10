@@ -63,9 +63,6 @@ func (r *HTTPRouteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := log.FromContext(ctx)
-	const (
-		finalizerName = "epic.acnodal.io/controller"
-	)
 	var (
 		missingService bool = false
 		missingParent  bool = false
@@ -88,7 +85,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 		// Remove our finalizer to ensure that we don't block the resource
 		// from being deleted.
-		if err := controllers.RemoveFinalizer(ctx, r.Client, &route, finalizerName); err != nil {
+		if err := controllers.RemoveFinalizer(ctx, r.Client, &route, controllers.FinalizerName); err != nil {
 			l.Error(err, "Removing finalizer")
 			// Fall through to delete the EPIC resource
 		}
@@ -142,7 +139,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// The resource is not being deleted, and it's our GWClass, so add
 	// our finalizer.
-	if err := controllers.AddFinalizer(ctx, r.Client, &route, finalizerName); err != nil {
+	if err := controllers.AddFinalizer(ctx, r.Client, &route, controllers.FinalizerName); err != nil {
 		return controllers.Done, err
 	}
 

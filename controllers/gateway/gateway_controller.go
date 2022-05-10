@@ -57,9 +57,6 @@ func (r *GatewayReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := log.FromContext(ctx)
-	const (
-		finalizerName = "epic.acnodal.io/controller"
-	)
 
 	// Get the Gateway that caused this request
 	gw := gatewayv1a2.Gateway{}
@@ -90,7 +87,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 		// Remove our finalizer to ensure that we don't block the resource
 		// from being deleted.
-		if err := controllers.RemoveFinalizer(ctx, r.Client, &gw, finalizerName); err != nil {
+		if err := controllers.RemoveFinalizer(ctx, r.Client, &gw, controllers.FinalizerName); err != nil {
 			l.Error(err, "Removing finalizer")
 			// Fall through to delete the EPIC resource
 		}

@@ -42,9 +42,6 @@ func (r *EndpointSliceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // Reconcile updates EPIC with the current EndpointSlice contents.
 func (r *EndpointSliceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := log.FromContext(ctx)
-	const (
-		finalizerName = "epic.acnodal.io/controller"
-	)
 
 	// See if the HTTPRoute controller has announced this slice. The
 	// route can tell whether we're interesting to EPIC or not, but we

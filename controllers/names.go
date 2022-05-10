@@ -10,6 +10,7 @@ const (
 	GatewayController = gatewayv1a2.GatewayController("acnodal.io/epic")
 
 	agentFinalizerPrefix = "epic.acnodal.io/agent_"
+	FinalizerName        = "epic.acnodal.io/controller"
 )
 
 // AgentFinalizerName returns the finalizer name for the given
