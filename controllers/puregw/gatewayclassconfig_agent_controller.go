@@ -45,9 +45,6 @@ func (r *GatewayClassConfigAgentReconciler) SetupWithManager(mgr ctrl.Manager) e
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.11.0/pkg/reconcile
 func (r *GatewayClassConfigAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := log.FromContext(ctx)
-	const (
-		finalizerName = "epic.acnodal.io/controller"
-	)
 
 	// Get the config that caused this request
 	gwc := epicgwv1.GatewayClassConfig{}

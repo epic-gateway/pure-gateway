@@ -62,9 +62,6 @@ func (r *HTTPRouteAgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *HTTPRouteAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := log.FromContext(ctx)
-	const (
-		finalizerName = "epic.acnodal.io/agent_"
-	)
 
 	// Get the Resource that triggered this request
 	route := gatewayv1a2.HTTPRoute{}
@@ -81,7 +78,7 @@ func (r *HTTPRouteAgentReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 		// Remove our finalizer to ensure that we don't block the resource
 		// from being deleted.
-		return controllers.Done, controllers.RemoveFinalizer(ctx, r.Client, &route, finalizerName+os.Getenv("EPIC_NODE_NAME"))
+		return controllers.Done, controllers.RemoveFinalizer(ctx, r.Client, &route, controllers.AgentFinalizerName())
 	}
 
 	// Try to get the Gateway to which we refer, and keep trying until
@@ -112,7 +109,7 @@ func (r *HTTPRouteAgentReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// The resource is not being deleted, and it's our GWClass, so add
 	// our finalizer.
-	if err := controllers.AddFinalizer(ctx, r.Client, &route, finalizerName+os.Getenv("EPIC_NODE_NAME")); err != nil {
+	if err := controllers.AddFinalizer(ctx, r.Client, &route, controllers.AgentFinalizerName()); err != nil {
 		return controllers.Done, err
 	}
 
