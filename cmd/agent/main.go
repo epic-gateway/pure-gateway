@@ -5,6 +5,7 @@ Copyright 2022 Acnodal.
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 	"os/exec"
@@ -75,17 +76,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&gatewaycontrollers.HTTPRouteAgentReconciler{
+	routeReconciler := gatewaycontrollers.HTTPRouteAgentReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+	}
+	if err = routeReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "HTTPRouteAgent")
 		os.Exit(1)
 	}
-	if err = (&puregwcontrollers.GatewayClassConfigAgentReconciler{
+	gwClassConfigReconciler := puregwcontrollers.GatewayClassConfigAgentReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+	}
+	if err = gwClassConfigReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GatewayClassConfigAgent")
 		os.Exit(1)
 	}
@@ -115,6 +118,15 @@ func main() {
 	// so they don't waste CPU.
 	setupLog.Info("removing BPF filters")
 	ti.RemoveFilters(setupLog, "default", "default")
+
+	setupLog.Info("cleaning up finalizers")
+	ctx := context.Background()
+	if err := gwClassConfigReconciler.Cleanup(setupLog, ctx); err != nil {
+		setupLog.Error(err, "unable to clean up GatewayClassConfigAgentReconciler")
+	}
+	if err := routeReconciler.Cleanup(setupLog, ctx); err != nil {
+		setupLog.Error(err, "unable to clean up HTTPRouteAgentReconciler")
+	}
 
 	setupLog.Info("exiting")
 	os.Exit(0)

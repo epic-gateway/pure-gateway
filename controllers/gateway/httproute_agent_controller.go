@@ -139,6 +139,21 @@ func (r *HTTPRouteAgentReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	return controllers.TryAgainLater, nil
 }
 
+// Cleanup removes our finalizer from all of the HTTPRoutes in the
+// system.
+func (r *HTTPRouteAgentReconciler) Cleanup(l logr.Logger, ctx context.Context) error {
+	routeList := gatewayv1a2.HTTPRouteList{}
+	if err := r.Client.List(ctx, &routeList); err != nil {
+		return err
+	}
+	for _, route := range routeList.Items {
+		if err := controllers.RemoveFinalizer(ctx, r.Client, &route, controllers.AgentFinalizerName()); err != nil {
+			l.Error(err, "removing Finalizer")
+		}
+	}
+	return nil
+}
+
 func setupTunnels(l logr.Logger, gw *gatewayv1a2.Gateway, spec epicgwv1.TrueIngress, slices []*discoveryv1.EndpointSlice, epic acnodal.EPIC, isEKS bool) (incomplete bool, err error) {
 	// Get the service that owns this endpoint. This endpoint
 	// will either re-use an existing tunnel or set up a new one

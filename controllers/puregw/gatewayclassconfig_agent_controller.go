@@ -7,6 +7,7 @@ package puregw
 import (
 	"context"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -61,4 +62,8 @@ func (r *GatewayClassConfigAgentReconciler) Reconcile(ctx context.Context, req c
 	ti.RemoveFilters(l, gwc.Spec.TrueIngress.EncapAttachment.Interface, gwc.Spec.TrueIngress.DecapAttachment.Interface)
 
 	return controllers.Done, nil
+}
+
+func (r *GatewayClassConfigAgentReconciler) Cleanup(l logr.Logger, ctx context.Context) error {
+	return nil
 }
