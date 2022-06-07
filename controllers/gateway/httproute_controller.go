@@ -107,7 +107,6 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	var config *epicgwv1.GatewayClassConfig
 	for _, parent := range route.Spec.ParentRefs {
 		gw := gatewayv1a2.Gateway{}
-		// FIXME: need to handle multiple parents
 		if err := parentGW(ctx, r.Client, route.Namespace, parent, &gw); err != nil {
 			l.Info("Can't get parent, will retry", "parentRef", parent)
 			return controllers.TryAgain, nil
@@ -121,6 +120,15 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 		if config == nil {
 			l.V(1).Info("Not our ControllerName, will ignore", "parentRef", parent, "controller", gw.Spec.GatewayClassName)
+			return controllers.Done, nil
+		}
+
+		// Make sure that the Gateway will allow this Route to attach
+		if err := gateway.GatewayAllowsRoute(gw, route); err != nil {
+			// Update the Route's status
+			if err := markRouteRejected(ctx, r.Client, l, client.ObjectKey{Namespace: route.GetNamespace(), Name: route.GetName()}); err != nil {
+				return controllers.Done, err
+			}
 			return controllers.Done, nil
 		}
 	}
@@ -260,7 +268,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			}
 
 			// Update the Route's status
-			err = markRouteReady(ctx, r.Client, l, client.ObjectKey{Namespace: route.GetNamespace(), Name: route.GetName()})
+			err = markRouteAccepted(ctx, r.Client, l, client.ObjectKey{Namespace: route.GetNamespace(), Name: route.GetName()})
 			if err != nil {
 				return controllers.Done, err
 			}
@@ -564,9 +572,20 @@ func maybeDelete(ctx context.Context, cl client.Client, route *gatewayv1a2.HTTPR
 	return nil
 }
 
-// markReady adds a Status Condition to indicate that we're
-// setting up the Gateway.
-func markRouteReady(ctx context.Context, cl client.Client, l logr.Logger, routeKey client.ObjectKey) error {
+// markRouteAccepted adds a Status Condition to indicate that the
+// route has been accepted by its parent.
+func markRouteAccepted(ctx context.Context, cl client.Client, l logr.Logger, routeKey client.ObjectKey) error {
+	return markRouteCondition(ctx, cl, l, routeKey, gatewayv1a2.ConditionRouteAccepted, metav1.ConditionTrue, status.ReasonValid, "Announced to EPIC")
+}
+
+// markRouteRejected adds a Status Condition to indicate that the
+// route has been accepted by its parent.
+func markRouteRejected(ctx context.Context, cl client.Client, l logr.Logger, routeKey client.ObjectKey) error {
+	return markRouteCondition(ctx, cl, l, routeKey, gatewayv1a2.ConditionRouteAccepted, metav1.ConditionFalse, status.ReasonGatewayAllowMismatch, "Reference not allowed by parent")
+}
+
+// markRouteCondition adds a Status Condition to the route.
+func markRouteCondition(ctx context.Context, cl client.Client, l logr.Logger, routeKey client.ObjectKey, cond gatewayv1a2.RouteConditionType, condStatus metav1.ConditionStatus, reason status.RouteReasonType, message string) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		route := gatewayv1a2.HTTPRoute{}
 
@@ -591,12 +610,12 @@ func markRouteReady(ctx context.Context, cl client.Client, l logr.Logger, routeK
 				Generation:         route.Generation,
 				TransitionTime:     metav1.NewTime(time.Now()),
 			}
-			rcu.AddCondition(gatewayv1a2.ConditionRouteAccepted, metav1.ConditionTrue, status.ReasonValid, "Announced to EPIC")
+			rcu.AddCondition(cond, condStatus, reason, message)
 
 			var ok bool
 			route2, ok = rcu.Mutate(&route).(*gatewayv1a2.HTTPRoute)
 			if !ok {
-				return fmt.Errorf("Failed to mutate Gateway")
+				return fmt.Errorf("Failed to mutate Route")
 			}
 		}
 
