@@ -116,6 +116,10 @@ type GatewaySpec struct {
 
 	// Endpoints holds the proxy's DNS records.
 	Endpoints []*DNSEndpoint `json:"endpoints,omitempty"`
+
+	// Gateway is the client-side gatewayv1a2.GatewaySpec that
+	// corresponds to this GWP.
+	Gateway gatewayv1a2.GatewaySpec `json:"gateway,omitempty"`
 }
 
 // EndpointMap contains a map of the EPIC endpoints that connect
@@ -263,6 +267,7 @@ func (n *epic) AnnounceGateway(url string, gw gatewayv1a2.Gateway) (GatewayRespo
 					},
 					DisplayName: gw.Name,
 					Ports:       ports,
+					Gateway:     gw.Spec,
 				},
 			},
 		}).
