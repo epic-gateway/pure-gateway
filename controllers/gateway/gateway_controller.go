@@ -22,9 +22,9 @@ import (
 
 	epicgwv1 "acnodal.io/puregw/apis/puregw/v1"
 	"acnodal.io/puregw/controllers"
+	"acnodal.io/puregw/internal/contour/gatewayapi"
+	"acnodal.io/puregw/internal/contour/status"
 	"acnodal.io/puregw/internal/gateway"
-	"acnodal.io/puregw/internal/gatewayapi"
-	"acnodal.io/puregw/internal/status"
 )
 
 // GatewayReconciler reconciles a Gateway object

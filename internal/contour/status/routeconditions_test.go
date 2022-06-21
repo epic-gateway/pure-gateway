@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"acnodal.io/puregw/internal/k8s"
+	"acnodal.io/puregw/internal/contour/k8s"
 
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

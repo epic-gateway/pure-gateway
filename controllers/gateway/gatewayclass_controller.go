@@ -17,7 +17,7 @@ import (
 	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"acnodal.io/puregw/controllers"
-	"acnodal.io/puregw/internal/status"
+	"acnodal.io/puregw/internal/contour/status"
 )
 
 var (
