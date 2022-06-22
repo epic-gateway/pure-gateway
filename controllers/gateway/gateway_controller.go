@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -22,6 +23,7 @@ import (
 
 	epicgwv1 "acnodal.io/puregw/apis/puregw/v1"
 	"acnodal.io/puregw/controllers"
+	"acnodal.io/puregw/internal/contour/dag"
 	"acnodal.io/puregw/internal/contour/gatewayapi"
 	"acnodal.io/puregw/internal/contour/status"
 	"acnodal.io/puregw/internal/gateway"
@@ -44,6 +46,7 @@ func (r *GatewayReconciler) SetupWithManager(mgr ctrl.Manager) error {
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways/finalizers,verbs=update
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gatewayclasses,verbs=get;list;watch
+//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=referencepolicies,verbs=get;list;watch
 //+kubebuilder:rbac:groups=puregw.acnodal.io,resources=gatewayclassconfigs,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -119,6 +122,41 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	l.V(1).Info("Reconciling")
 
+	gsu := status.GatewayStatusUpdate{
+		FullName:           types.NamespacedName{Namespace: gw.Namespace, Name: gw.Name},
+		Conditions:         make(map[gatewayv1a2.GatewayConditionType]metav1.Condition),
+		ExistingConditions: nil,
+		Generation:         gw.Generation,
+		TransitionTime:     metav1.NewTime(time.Now()),
+	}
+
+	// Set the listener supportedKinds
+	for _, listener := range gw.Spec.Listeners {
+		gsu.SetListenerSupportedKinds(string(listener.Name), epicgwv1.SupportedKinds)
+	}
+
+	// Validate TLS configuration (if present)
+	tlsOK := true
+	for _, listener := range gw.Spec.Listeners {
+		if listener.TLS != nil {
+			// If we have a TLS config then we need to validate it.
+			if dag.ValidGatewayTLS(gw, *listener.TLS, string(listener.Name), &gsu, r) == nil {
+				tlsOK = false
+			}
+		}
+	}
+
+	// If there's something wrong with the TLS config then mark the
+	// gateway and don't announce.
+	if !tlsOK {
+		gsu.AddCondition(gatewayv1a2.GatewayConditionScheduled, metav1.ConditionFalse, status.ReasonValidGateway, "Invalid GatewayTLS")
+		gsu.AddCondition(gatewayv1a2.GatewayConditionReady, metav1.ConditionTrue, status.ReasonValidGateway, "Not announced to EPIC")
+		if err := updateStatus(ctx, r.Client, l, &gw, &gsu); err != nil {
+			return controllers.Done, err
+		}
+		return controllers.Done, nil
+	}
+
 	// Get the EPIC ServiceGroup
 	group, err := epic.GetGroup()
 	if err != nil {
@@ -129,7 +167,8 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	response, err := epic.AnnounceGateway(group.Links["create-proxy"], gw)
 	if err != nil {
 		// Tell the user that something has gone wrong
-		markError(ctx, r.Client, l, &gw, err.Error())
+		gsu.AddCondition(gatewayv1a2.GatewayConditionScheduled, metav1.ConditionFalse, status.ReasonValidGateway, err.Error())
+		updateStatus(ctx, r.Client, l, &gw, &gsu)
 		return controllers.Done, err
 	}
 
@@ -139,8 +178,14 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	l.Info("Announced", "self-link", response.Links["self"])
 
+	// Add the allocated IP and hostname to the GW status.
+	if err := markAddresses(ctx, r.Client, l, &gw, response.Gateway.Spec.Address, response.Gateway.Spec.Endpoints[0].DNSName); err != nil {
+		return controllers.Done, err
+	}
+
 	// Tell the user that we're working on bringing up the Gateway.
-	if err := markReady(ctx, r.Client, l, &gw, response.Gateway.Spec.Address, response.Gateway.Spec.Endpoints[0].DNSName); err != nil {
+	gsu.AddCondition(gatewayv1a2.GatewayConditionReady, metav1.ConditionTrue, status.ReasonValidGateway, "Announced to EPIC")
+	if err := updateStatus(ctx, r.Client, l, &gw, &gsu); err != nil {
 		return controllers.Done, err
 	}
 
@@ -249,9 +294,22 @@ func (r *GatewayReconciler) addEpicLink(ctx context.Context, gw *gatewayv1a2.Gat
 	return nil
 }
 
-// markReady adds a Status Condition to indicate that we're
-// setting up the Gateway.
-func markReady(ctx context.Context, cl client.Client, l logr.Logger, gw *gatewayv1a2.Gateway, publicIP string, publicHostname string) error {
+// GetSecret implements the dag.Fetcher GetSecret() method.
+// FIXME: move this into its own class so we can use the correct context.
+func (r *GatewayReconciler) GetSecret(name types.NamespacedName) (*v1.Secret, error) {
+	secret := v1.Secret{}
+	return &secret, r.Get(context.Background(), name, &secret)
+}
+
+// GetGrants implements the dag.Fetcher GetGrants() method.
+func (r *GatewayReconciler) GetGrants(ns string) (gatewayv1a2.ReferencePolicyList, error) {
+	classList := gatewayv1a2.ReferencePolicyList{}
+	return classList, r.List(context.Background(), &classList)
+}
+
+// updateStatus uses Contour's GatewayStatusUpdate to update the
+// Gateway's status.
+func updateStatus(ctx context.Context, cl client.Client, l logr.Logger, gw *gatewayv1a2.Gateway, gsu *status.GatewayStatusUpdate) error {
 	key := client.ObjectKey{Namespace: gw.GetNamespace(), Name: gw.GetName()}
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -263,32 +321,9 @@ func markReady(ctx context.Context, cl client.Client, l logr.Logger, gw *gateway
 			return err
 		}
 
-		// Use Contour code to add/update the Gateway's Status Condition
-		// to "Ready".
-		gsu := status.GatewayStatusUpdate{
-			FullName:           types.NamespacedName{Namespace: gw.Namespace, Name: gw.Name},
-			Conditions:         make(map[gatewayv1a2.GatewayConditionType]metav1.Condition),
-			ExistingConditions: nil,
-			Generation:         gw.Generation,
-			TransitionTime:     metav1.NewTime(time.Now()),
-		}
-		gsu.AddCondition(gatewayv1a2.GatewayConditionReady, metav1.ConditionTrue, status.ReasonValidGateway, "Announced to EPIC")
 		got, ok := gsu.Mutate(gw).(*gatewayv1a2.Gateway)
 		if !ok {
 			return fmt.Errorf("Failed to mutate Gateway")
-		}
-
-		// Add the IP address to GW.Status so the user can find out what
-		// it is.
-		got.Status.Addresses = []gatewayv1a2.GatewayAddress{{
-			Type:  gatewayapi.AddressTypePtr(gatewayv1a2.IPAddressType),
-			Value: publicIP,
-		}}
-		if publicHostname != "" {
-			got.Status.Addresses = append(got.Status.Addresses, gatewayv1a2.GatewayAddress{
-				Type:  gatewayapi.AddressTypePtr(gatewayv1a2.HostnameAddressType),
-				Value: publicHostname,
-			})
 		}
 
 		// Try to update
@@ -296,9 +331,8 @@ func markReady(ctx context.Context, cl client.Client, l logr.Logger, gw *gateway
 	})
 }
 
-// markError adds a Status Condition to indicate that we're
-// setting up the Gateway.
-func markError(ctx context.Context, cl client.Client, l logr.Logger, gw *gatewayv1a2.Gateway, message string) error {
+// markAddresses adds publicIP and publicHostname to gw's status.
+func markAddresses(ctx context.Context, cl client.Client, l logr.Logger, gw *gatewayv1a2.Gateway, publicIP string, publicHostname string) error {
 	key := client.ObjectKey{Namespace: gw.GetNamespace(), Name: gw.GetName()}
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -310,23 +344,21 @@ func markError(ctx context.Context, cl client.Client, l logr.Logger, gw *gateway
 			return err
 		}
 
-		// Use Contour code to add/update the Gateway's Status Condition
-		// to "Ready".
-		gsu := status.GatewayStatusUpdate{
-			FullName:           types.NamespacedName{Namespace: gw.Namespace, Name: gw.Name},
-			Conditions:         make(map[gatewayv1a2.GatewayConditionType]metav1.Condition),
-			ExistingConditions: nil,
-			Generation:         gw.Generation,
-			TransitionTime:     metav1.NewTime(time.Now()),
-		}
-		gsu.AddCondition(gatewayv1a2.GatewayConditionScheduled, metav1.ConditionFalse, status.ReasonValidGateway, message)
-		got, ok := gsu.Mutate(gw).(*gatewayv1a2.Gateway)
-		if !ok {
-			return fmt.Errorf("Failed to mutate Gateway")
+		// Add the IP address to GW.Status so the user can find out what
+		// it is.
+		gw.Status.Addresses = []gatewayv1a2.GatewayAddress{{
+			Type:  gatewayapi.AddressTypePtr(gatewayv1a2.IPAddressType),
+			Value: publicIP,
+		}}
+		if publicHostname != "" {
+			gw.Status.Addresses = append(gw.Status.Addresses, gatewayv1a2.GatewayAddress{
+				Type:  gatewayapi.AddressTypePtr(gatewayv1a2.HostnameAddressType),
+				Value: publicHostname,
+			})
 		}
 
 		// Try to update
-		return cl.Status().Update(ctx, got)
+		return cl.Status().Update(ctx, gw)
 	})
 }
 
