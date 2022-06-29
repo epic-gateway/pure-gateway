@@ -392,7 +392,7 @@ func gatewayChildren(ctx context.Context, cl client.Client, l logr.Logger, gw *g
 
 // isRefToGateway returns whether or not ref is a reference
 // to a Gateway with the given namespace & name.
-func isRefToGateway(ref gatewayv1a2.ParentRef, gateway types.NamespacedName) bool {
+func isRefToGateway(ref gatewayv1a2.ParentReference, gateway types.NamespacedName) bool {
 	// This is copied from internal/status/routeconditions.go which
 	// doesn't seem to handle "default" as a namespace.
 	if ref.Group != nil && *ref.Group != gatewayv1a2.GroupName {

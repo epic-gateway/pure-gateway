@@ -54,7 +54,7 @@ func ValidGatewayTLS(gateway gatewayapi_v1alpha2.Gateway, listenerTLS gatewayapi
 
 	// Validate a v1.Secret is referenced which can be kind: secret & group: core.
 	// ref: https://github.com/kubernetes-sigs/gateway-api/pull/562
-	if !isSecretRef(*certificateRef) {
+	if !isSecretRef(certificateRef) {
 		gwAccessor.AddListenerCondition(
 			listenerName,
 			gatewayapi_v1alpha2.ListenerConditionResolvedRefs,

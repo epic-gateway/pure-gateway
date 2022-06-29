@@ -379,7 +379,7 @@ func announceSlices(ctx context.Context, cl client.Client, l logr.Logger, sliceU
 // provided ParentRef. defaultNS is the namespace of the object that
 // contains the ref, which means that it's the default namespace if
 // the ref doesn't have one.
-func parentGW(ctx context.Context, cl client.Client, defaultNS string, ref gatewayv1a2.ParentRef, gw *gatewayv1a2.Gateway) error {
+func parentGW(ctx context.Context, cl client.Client, defaultNS string, ref gatewayv1a2.ParentReference, gw *gatewayv1a2.Gateway) error {
 	gwName := namespacedNameOfParentRef(ref, defaultNS)
 	return cl.Get(ctx, gwName, gw)
 }
@@ -531,7 +531,7 @@ func addSliceEpicLink(ctx context.Context, cl client.Client, slice *discoveryv1.
 		Spec: epicgwv1.EndpointSliceShadowSpec{
 			EPICConfigName: configName,
 			EPICLink:       link,
-			ParentRoutes: []gatewayv1a2.ParentRef{{
+			ParentRoutes: []gatewayv1a2.ParentReference{{
 				Kind:      &kind,
 				Namespace: &ns,
 				Name:      name,
@@ -575,13 +575,13 @@ func maybeDelete(ctx context.Context, cl client.Client, route *gatewayv1a2.HTTPR
 // markRouteAccepted adds a Status Condition to indicate that the
 // route has been accepted by its parent.
 func markRouteAccepted(ctx context.Context, cl client.Client, l logr.Logger, routeKey client.ObjectKey) error {
-	return markRouteCondition(ctx, cl, l, routeKey, gatewayv1a2.ConditionRouteAccepted, metav1.ConditionTrue, status.ReasonValid, "Announced to EPIC")
+	return markRouteCondition(ctx, cl, l, routeKey, gatewayv1a2.RouteConditionAccepted, metav1.ConditionTrue, status.ReasonValid, "Announced to EPIC")
 }
 
 // markRouteRejected adds a Status Condition to indicate that the
 // route has been accepted by its parent.
 func markRouteRejected(ctx context.Context, cl client.Client, l logr.Logger, routeKey client.ObjectKey) error {
-	return markRouteCondition(ctx, cl, l, routeKey, gatewayv1a2.ConditionRouteAccepted, metav1.ConditionFalse, status.ReasonGatewayAllowMismatch, "Reference not allowed by parent")
+	return markRouteCondition(ctx, cl, l, routeKey, gatewayv1a2.RouteConditionAccepted, metav1.ConditionFalse, status.ReasonGatewayAllowMismatch, "Reference not allowed by parent")
 }
 
 // markRouteCondition adds a Status Condition to the route.
@@ -626,7 +626,7 @@ func markRouteCondition(ctx context.Context, cl client.Client, l logr.Logger, ro
 
 // namespacedNameOfParentRef returns the NamespacedName of a
 // ParentRef.
-func namespacedNameOfParentRef(ref gatewayv1a2.ParentRef, defaultNS string) types.NamespacedName {
+func namespacedNameOfParentRef(ref gatewayv1a2.ParentReference, defaultNS string) types.NamespacedName {
 	name := types.NamespacedName{Namespace: defaultNS, Name: string(ref.Name)}
 	if ref.Namespace != nil {
 		name.Namespace = string(*ref.Namespace)

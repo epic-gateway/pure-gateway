@@ -44,7 +44,7 @@ before_script:
 
 generate:
   stage: check
-  image: golang:1.16-bullseye
+  image: golang:1.17-bullseye
   before_script:
   - *debian-setup
   - *git-setup
@@ -59,7 +59,7 @@ build-image:
 
 k8s-manifest:
   stage: build
-  image: golang:1.16-bullseye
+  image: golang:1.17-bullseye
   before_script:
   - *debian-setup
   - *tag-setup

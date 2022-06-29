@@ -20,7 +20,7 @@ type EndpointSliceShadowSpec struct {
 
 	// ParentRoutes provides an efficient way to link back to the
 	// HTTPRoutes that reference this slice.
-	ParentRoutes []gatewayv1a2.ParentRef `json:"parentRoutes"`
+	ParentRoutes []gatewayv1a2.ParentReference `json:"parentRoutes"`
 }
 
 // EndpointSliceShadowStatus defines the observed state of EndpointSliceShadow
