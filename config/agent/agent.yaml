@@ -24,10 +24,6 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
-        - name: EPIC_HOST_IP
-          valueFrom:
-            fieldRef:
-              fieldPath: status.hostIP
         image: controller:latest
         imagePullPolicy: Always
         securityContext:

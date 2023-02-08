@@ -7,6 +7,7 @@ package discovery
 import (
 	"context"
 
+	"github.com/vishvananda/netlink/nl"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -19,6 +20,7 @@ import (
 	epicgwv1 "acnodal.io/puregw/apis/puregw/v1"
 	"acnodal.io/puregw/controllers"
 	"acnodal.io/puregw/internal/acnodal"
+	"acnodal.io/puregw/internal/trueingress"
 )
 
 // EndpointSliceReconciler reconciles a EndpointSlice object
@@ -97,12 +99,14 @@ func (r *EndpointSliceReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		if err != nil {
 			return controllers.Done, err
 		}
-		for _, addr := range node.Status.Addresses {
-			if addr.Type == corev1.NodeInternalIP {
-				nodeAddrs[*ep.NodeName] = addr.Address
-			}
+
+		nodeAddr := trueingress.NodeAddress(node, nl.FAMILY_V4)
+		if nodeAddr != nil {
+			nodeAddrs[*ep.NodeName] = nodeAddr.String()
 		}
 	}
+
+	l.V(1).Info("Node addresses", "nodeAddrs", nodeAddrs)
 
 	spec := acnodal.SliceSpec{
 		ClientRef: acnodal.ClientRef{

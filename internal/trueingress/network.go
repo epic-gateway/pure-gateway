@@ -12,6 +12,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
+	corev1 "k8s.io/api/core/v1"
 )
 
 const (
@@ -69,6 +70,27 @@ func DefaultInterface(family int) (netlink.Link, error) {
 	// there's only one default route
 	defaultint, err := netlink.LinkByIndex(defaultifindex)
 	return defaultint, err
+}
+
+// NodeAddress finds the node's first "internal" address in the
+// specified family. We used to use the downward API for this but we
+// need to be able to pick a specific address family and the downward
+// API doesn't allow us to do that. For example, we might need to
+// ensure that we use an IPV4 address because at the moment our
+// TrueIngress BPF filters only work with IPV4.
+//
+// If no address in the specified family can be found then the return
+// value will be nil.
+func NodeAddress(node corev1.Node, lbIPFamily int) net.IP {
+	for _, addr := range node.Status.Addresses {
+		if addr.Type == corev1.NodeInternalIP {
+			if ip := net.ParseIP(addr.Address); ip != nil && AddrFamily(ip) == lbIPFamily {
+				return ip
+			}
+		}
+	}
+
+	return nil
 }
 
 // addNetwork adds lbIPNet to link.

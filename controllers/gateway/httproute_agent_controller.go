@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netlink/nl"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -25,6 +26,7 @@ import (
 	epicgwv1 "acnodal.io/puregw/apis/puregw/v1"
 	"acnodal.io/puregw/controllers"
 	"acnodal.io/puregw/internal/acnodal"
+	"acnodal.io/puregw/internal/trueingress"
 	ti "acnodal.io/puregw/internal/trueingress"
 )
 
@@ -100,6 +102,19 @@ func (r *HTTPRouteAgentReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return controllers.Done, nil
 	}
 
+	// Figure out this node's IPV4 address
+	node := corev1.Node{}
+	nodeName := types.NamespacedName{Namespace: "", Name: os.Getenv("EPIC_NODE_NAME")}
+	if err := r.Get(ctx, nodeName, &node); err != nil {
+		return controllers.Done, err
+	}
+
+	nodeIPV4 := trueingress.NodeAddress(node, nl.FAMILY_V4)
+	if nodeIPV4 == nil {
+		return controllers.Done, fmt.Errorf("can't determine node's IPV4 address")
+	}
+
+	// Connect to EPIC
 	epic, err := controllers.ConnectToEPIC(ctx, r.Client, &config.Namespace, config.Name)
 	if err != nil {
 		return controllers.Done, err
@@ -127,7 +142,7 @@ func (r *HTTPRouteAgentReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	if err != nil {
 		return controllers.Done, err
 	}
-	incomplete, err = setupTunnels(l, &gw, *config.Spec.TrueIngress, slices, epic, isEKS)
+	incomplete, err = setupTunnels(l, &gw, *config.Spec.TrueIngress, slices, epic, isEKS, nodeIPV4)
 	if incomplete {
 		return controllers.TryAgain, nil
 	}
@@ -154,7 +169,7 @@ func (r *HTTPRouteAgentReconciler) Cleanup(l logr.Logger, ctx context.Context) e
 	return nil
 }
 
-func setupTunnels(l logr.Logger, gw *gatewayv1a2.Gateway, spec epicgwv1.TrueIngress, slices []*discoveryv1.EndpointSlice, epic acnodal.EPIC, isEKS bool) (incomplete bool, err error) {
+func setupTunnels(l logr.Logger, gw *gatewayv1a2.Gateway, spec epicgwv1.TrueIngress, slices []*discoveryv1.EndpointSlice, epic acnodal.EPIC, isEKS bool, nodeIPV4 net.IP) (incomplete bool, err error) {
 	// Get the service that owns this endpoint. This endpoint
 	// will either re-use an existing tunnel or set up a new one
 	// for this node. Tunnels belong to the service.
@@ -176,11 +191,11 @@ func setupTunnels(l logr.Logger, gw *gatewayv1a2.Gateway, spec epicgwv1.TrueIngr
 				// not be yet since it sometimes takes a while to set
 				// up). If it's not there then return "incomplete" which
 				// will cause a retry.
-				myTunnels, exists := svcResponse.Gateway.Spec.TunnelEndpoints[os.Getenv("EPIC_HOST_IP")]
+				myTunnels, exists := svcResponse.Gateway.Spec.TunnelEndpoints[nodeIPV4.String()]
 				if !exists {
 					l.Info("fetchTunnelConfig", "endpoints", svcResponse.Gateway)
 
-					return true, fmt.Errorf("tunnel config not found for %s", os.Getenv("EPIC_HOST_IP"))
+					return true, fmt.Errorf("tunnel config not found for %s", nodeIPV4.String())
 				}
 
 				// Now that we've got the service response we have enough
