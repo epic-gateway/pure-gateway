@@ -2,7 +2,7 @@ module acnodal.io/puregw
 
 go 1.17
 
-replace sigs.k8s.io/gateway-api => github.com/purelb/gateway-api v0.5.0-rc1-epic0
+replace sigs.k8s.io/gateway-api => github.com/purelb/gateway-api v0.5.0-epic0
 
 require (
 	github.com/go-logr/logr v1.2.0
