@@ -17,19 +17,16 @@ IMG ?= ${IMAGE_TAG_BASE}/controller:${VERSION}
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.22
 
-# Get the currently used golang install path (in GOPATH/bin, unless
-# GOBIN is set). If GOBIN is set then we don't need to run the "go"
-# executable which is useful when we're building Docker images since
-# the Docker-in-Docker images don't have go built in.
-GOBIN ?= $(shell go env GOPATH)/bin
+# Tools that we use.
+CONTROLLER_GEN = go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.7.0
+KUSTOMIZE = go run sigs.k8s.io/kustomize/kustomize/v4@v4.5.2
+ENVTEST = go run sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
 
 # Setting SHELL to bash allows bash commands to be executed by recipes.
 # This is a requirement for 'setup-envtest.sh' in the test target.
 # Options are set to exit when a recipe line exits non-zero or a piped command fails.
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
-
-all: build
 
 ##@ General
 
@@ -49,8 +46,9 @@ help: ## Display this help.
 
 ##@ Development
 
-manifests: CACHE != mktemp -d
-manifests: controller-gen kustomize ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
+generate: CACHE != mktemp -d
+generate: ## Generate code and manifests
+# Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 # cache kustomization.yaml because "kustomize edit" modifies it
 	cp config/agent/kustomization.yaml ${CACHE}/kustomization-agent.yaml
@@ -64,8 +62,7 @@ manifests: controller-gen kustomize ## Generate WebhookConfiguration, ClusterRol
 # restore kustomization.yaml
 	cp ${CACHE}/kustomization-agent.yaml config/agent/kustomization.yaml
 	cp ${CACHE}/kustomization-manager.yaml config/manager/kustomization.yaml
-
-generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+# generate deepcopy code
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
 fmt: ## Run go fmt against code.
@@ -74,13 +71,13 @@ fmt: ## Run go fmt against code.
 vet: ## Run go vet against code.
 	go vet ./...
 
-unit-test: manifests generate fmt vet envtest ## Run unit tests (no external resources needed).
+unit-test: generate fmt vet ## Run unit tests (no external resources needed).
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -short -coverprofile cover.out
 
-check: manifests generate fmt vet envtest ## Run "short" tests only.
+check: generate fmt vet ## Run "short" tests only.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -short -coverprofile cover.out
 
-test: manifests generate fmt vet envtest ## Run all tests, even ones that need external resources.
+test: generate fmt vet ## Run all tests, even ones that need external resources.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
 
 ##@ Build
@@ -89,57 +86,30 @@ build: generate fmt vet ## Build manager binary.
 	go build -o bin/manager ./cmd/manager/...
 	go build -o bin/agent ./cmd/agent/...
 
-run: manifests generate fmt vet ## Run a controller from your host.
+run: generate fmt vet ## Run a controller from your host.
 	go run ./cmd/manager/...
 
-run-agent: manifests generate fmt vet ## Run an agent from your host.
+run-agent: generate fmt vet ## Run an agent from your host.
 	EPIC_NODE_NAME=mk8s1 EPIC_HOST_IP=192.168.254.101 go run ./cmd/agent/...
 
-docker-build: ## Build docker image with the manager.
+docker-build: ## Build docker image.
 	docker build -t ${IMG} \
 	--build-arg GITLAB_TOKEN \
 	.
 
-docker-push: ## Push docker image with the manager.
+docker-push: ## Push docker image to the registry.
 	docker push ${IMG}
 
 ##@ Deployment
 
-install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
+install: ## Install CRDs into the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/crd | kubectl apply -f -
 
-uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config.
+uninstall: ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/crd | kubectl delete -f -
 
-deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+deploy: generate ## Deploy to the K8s cluster specified in ~/.kube/config.
 	kubectl apply -f deploy/epic-gateway.yaml
 
-undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
+undeploy: generate ## Undeploy from the K8s cluster specified in ~/.kube/config.
 	kubectl delete -f deploy/epic-gateway.yaml
-
-
-CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
-controller-gen: ## Download controller-gen locally if necessary.
-	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.7.0)
-
-KUSTOMIZE = $(shell pwd)/bin/kustomize
-kustomize: ## Download kustomize locally if necessary.
-	$(call go-get-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v3@v3.8.7)
-
-ENVTEST = $(shell pwd)/bin/setup-envtest
-envtest: ## Download envtest-setup locally if necessary.
-	$(call go-get-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest@latest)
-
-# go-get-tool will 'go get' any package $2 and install it to $1.
-PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
-define go-get-tool
-@[ -f $(1) ] || { \
-set -e ;\
-TMP_DIR=$$(mktemp -d) ;\
-cd $$TMP_DIR ;\
-go mod init tmp ;\
-echo "Downloading $(2)" ;\
-GOBIN=$(PROJECT_DIR)/bin go get $(2) ;\
-rm -rf $$TMP_DIR ;\
-}
-endef

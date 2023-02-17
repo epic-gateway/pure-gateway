@@ -3,8 +3,8 @@ Copyright 2022 Acnodal.
 */
 
 // Package v1 contains API Schema definitions for the puregw v1 API group
-//+kubebuilder:object:generate=true
-//+groupName=puregw.acnodal.io
+// +kubebuilder:object:generate=true
+// +groupName=puregw.acnodal.io
 package v1
 
 import (
