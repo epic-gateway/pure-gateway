@@ -21,7 +21,7 @@ import (
 )
 
 var (
-	Listener80     = gatewayv1a2.Listener{Port: 80, Protocol: gatewayv1a2.HTTPProtocolType}
+	Listener80     = gatewayv1a2.Listener{Name: "listener80", Port: 80, Protocol: gatewayv1a2.HTTPProtocolType}
 	EndpointPort80 = v1.EndpointPort{Port: 80}
 	EndpointPort81 = v1.EndpointPort{Port: 81}
 )
@@ -29,7 +29,7 @@ var (
 const (
 	TestHarnessEPIC = "acndev-ctl"
 	UserNS          = "root"
-	GroupName       = "samplehttp"
+	GroupName       = "gatewayhttp"
 	ServiceAccount  = "user1"
 	ServiceKey      = "password1"
 	NodeName        = "mk8s1"
