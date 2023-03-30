@@ -72,6 +72,7 @@ k8s-manifest:
       wget --no-verbose --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --method=PUT --body-file=deploy/epic-gateway.yaml "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/manifest/${TAG_LATEST}/epic-gateway.yaml"
     else
       wget --no-verbose "--http-user=$PUBLIC_DEPLOY_USER" "--http-password=$PUBLIC_DEPLOY_TOKEN" --method=PUT --body-file=deploy/epic-gateway.yaml "${CI_API_V4_URL}/projects/34809193/packages/generic/manifest/${TAG_SPECIFIC}/epic-gateway.yaml"
+      wget --no-verbose "--http-user=$PUBLIC_DEPLOY_USER" "--http-password=$PUBLIC_DEPLOY_TOKEN" --method=PUT --body-file=deploy/epic-gateway-development.yaml "${CI_API_V4_URL}/projects/34809193/packages/generic/manifest/${TAG_SPECIFIC}/epic-gateway-development.yaml"
     fi
 
   artifacts:
