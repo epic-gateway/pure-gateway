@@ -6,19 +6,14 @@ package gateway
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"time"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -27,26 +22,25 @@ import (
 	epicgwv1 "acnodal.io/puregw/apis/puregw/v1"
 	"acnodal.io/puregw/controllers"
 	"acnodal.io/puregw/internal/acnodal"
-	"acnodal.io/puregw/internal/contour/status"
 	"acnodal.io/puregw/internal/gateway"
 )
 
-// HTTPRouteReconciler reconciles a HTTPRoute object
-type HTTPRouteReconciler struct {
+// TCPRouteReconciler reconciles a TCPRoute object
+type TCPRouteReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *HTTPRouteReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *TCPRouteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&gatewayv1a2.HTTPRoute{}).
+		For(&gatewayv1a2.TCPRoute{}).
 		Complete(r)
 }
 
-//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes/finalizers,verbs=update
+//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=tcproutes,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=tcproutes/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=tcproutes/finalizers,verbs=update
 //+kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch
 //+kubebuilder:rbac:groups=discovery.k8s.io,resources=endpointslices,verbs=get;list;watch
 //+kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
@@ -55,23 +49,23 @@ func (r *HTTPRouteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // TODO(user): Modify the Reconcile function to compare the state specified by
-// the HTTPRoute object against the actual cluster state, and then
+// the TCPRoute object against the actual cluster state, and then
 // perform operations to make the cluster state reflect the state specified by
 // the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
-func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *TCPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := log.FromContext(ctx)
 	var (
 		missingService bool = false
 		missingParent  bool = false
 	)
 
-	// Get the HTTPRoute that triggered this request
-	route := gatewayv1a2.HTTPRoute{}
+	// Get the TCPRoute that triggered this request
+	route := gatewayv1a2.TCPRoute{}
 	if err := r.Get(ctx, req.NamespacedName, &route); err != nil {
-		l.Info("Can't get HTTPRoute, probably deleted", "name", req.NamespacedName)
+		l.Info("Can't get TCPRoute, probably deleted", "name", req.NamespacedName)
 
 		// ignore not-found errors, since they can't be fixed by an
 		// immediate requeue (we'll need to wait for a new notification),
@@ -172,7 +166,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	for i, rule := range announcedRoute.Spec.Rules {
 		for j, ref := range rule.BackendRefs {
 			svc := corev1.Service{}
-			if err := r.Get(ctx, namespacedNameOfHTTPBackendRef(ref.BackendRef, route.Namespace), &svc); err != nil {
+			if err := r.Get(ctx, namespacedNameOfHTTPBackendRef(ref, route.Namespace), &svc); err != nil {
 				l.Info("Backend not found", "backendRef", ref)
 				missingService = true
 			} else {
@@ -212,7 +206,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			// first so the slices will be in place when the route is
 			// announced. The slices need the route to be able to allocate
 			// tunnel IDs.
-			if err := announceSlices(ctx, r.Client, l, account.Links["create-slice"], epic, config.NamespacedName().String(), &route); err != nil {
+			if err := announceSlicesTCP(ctx, r.Client, l, account.Links["create-slice"], epic, config.NamespacedName().String(), &route); err != nil {
 				return controllers.Done, err
 			}
 
@@ -224,7 +218,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 						Name:      announcedRoute.Name,
 						UID:       string(announcedRoute.UID),
 					},
-					HTTP: &announcedRoute.Spec,
+					TCP: &announcedRoute.Spec,
 				})
 			if err != nil {
 				return controllers.Done, err
@@ -244,7 +238,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			// first so the slices will be in place when the route is
 			// announced. The slices need the route to be able to allocate
 			// tunnel IDs.
-			if err := announceSlices(ctx, r.Client, l, account.Links["create-slice"], epic, config.NamespacedName().String(), &route); err != nil {
+			if err := announceSlicesTCP(ctx, r.Client, l, account.Links["create-slice"], epic, config.NamespacedName().String(), &route); err != nil {
 				return controllers.Done, err
 			}
 
@@ -256,7 +250,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 						Name:      announcedRoute.Name,
 						UID:       string(announcedRoute.UID),
 					},
-					HTTP: &announcedRoute.Spec,
+					TCP: &announcedRoute.Spec,
 				})
 			if err != nil {
 				return controllers.Done, err
@@ -280,10 +274,10 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	return controllers.Done, nil
 }
 
-// Cleanup removes our finalizer from all of the HTTPRoutes in the
+// Cleanup removes our finalizer from all of the TCPRoutes in the
 // system.
-func (r *HTTPRouteReconciler) Cleanup(l logr.Logger, ctx context.Context) error {
-	routeList := gatewayv1a2.HTTPRouteList{}
+func (r *TCPRouteReconciler) Cleanup(l logr.Logger, ctx context.Context) error {
+	routeList := gatewayv1a2.TCPRouteList{}
 	if err := r.Client.List(ctx, &routeList); err != nil {
 		return err
 	}
@@ -295,12 +289,12 @@ func (r *HTTPRouteReconciler) Cleanup(l logr.Logger, ctx context.Context) error 
 	return nil
 }
 
-// announceSlices announces the slices that this HTTPRoute
+// announceSlices announces the slices that this TCPRoute
 // references.If the error return value is non-nil them something has
 // gone wrong.
-func announceSlices(ctx context.Context, cl client.Client, l logr.Logger, sliceURL string, epic acnodal.EPIC, configName string, route *gatewayv1a2.HTTPRoute) error {
+func announceSlicesTCP(ctx context.Context, cl client.Client, l logr.Logger, sliceURL string, epic acnodal.EPIC, configName string, route *gatewayv1a2.TCPRoute) error {
 	// Get the set of EndpointSlices that this Route references.
-	slices, incomplete, err := routeSlices(ctx, cl, route)
+	slices, incomplete, err := routeSlicesTCP(ctx, cl, route)
 	if err != nil {
 		return err
 	}
@@ -375,21 +369,12 @@ func announceSlices(ctx context.Context, cl client.Client, l logr.Logger, sliceU
 	return nil
 }
 
-// parentGW gets the parent Gateway resource pointed to by the
-// provided ParentRef. defaultNS is the namespace of the object that
-// contains the ref, which means that it's the default namespace if
-// the ref doesn't have one.
-func parentGW(ctx context.Context, cl client.Client, defaultNS string, ref gatewayv1a2.ParentReference, gw *gatewayv1a2.Gateway) error {
-	gwName := namespacedNameOfParentRef(ref, defaultNS)
-	return cl.Get(ctx, gwName, gw)
-}
-
 // routeSlices returns all of the slices that belong to all of
 // the services referenced by route. If incomplete is true then
 // something is missing so the controller needs to back off and retry
 // later. If err is non-nil then the array of EndpointSlices is
 // invalid.
-func routeSlices(ctx context.Context, cl client.Client, route *gatewayv1a2.HTTPRoute) (slices []*discoveryv1.EndpointSlice, incomplete bool, err error) {
+func routeSlicesTCP(ctx context.Context, cl client.Client, route *gatewayv1a2.TCPRoute) (slices []*discoveryv1.EndpointSlice, incomplete bool, err error) {
 	// Assume that we can reach all of our services.
 	incomplete = false
 
@@ -401,7 +386,7 @@ func routeSlices(ctx context.Context, cl client.Client, route *gatewayv1a2.HTTPR
 
 			// Get the service referenced by this ref.
 			svc := corev1.Service{}
-			err = cl.Get(ctx, namespacedNameOfHTTPBackendRef(ref.BackendRef, route.Namespace), &svc)
+			err = cl.Get(ctx, namespacedNameOfHTTPBackendRef(ref, route.Namespace), &svc)
 			if err != nil {
 				// If the service doesn't exist yet then tell the controller
 				// to back off and retry.
@@ -432,215 +417,4 @@ func routeSlices(ctx context.Context, cl client.Client, route *gatewayv1a2.HTTPR
 	}
 
 	return
-}
-
-// addEpicLink adds our annotations that indicate that the route has
-// been announced.
-func addEpicLink(ctx context.Context, cl client.Client, route client.Object, link string, configName string) error {
-	var (
-		patch      []map[string]interface{}
-		patchBytes []byte
-		err        error
-	)
-
-	if route.GetAnnotations() == nil {
-		// If this is the first annotation then we need to wrap it in an
-		// object
-		patch = []map[string]interface{}{{
-			"op":   "add",
-			"path": "/metadata/annotations",
-			"value": map[string]string{
-				epicgwv1.EPICLinkAnnotation:   link,
-				epicgwv1.EPICConfigAnnotation: configName,
-			},
-		}}
-	} else {
-		// If there are other annotations then we can just add this one
-		patch = []map[string]interface{}{
-			{
-				"op":    "add",
-				"path":  epicgwv1.EPICLinkAnnotationPatch,
-				"value": link,
-			},
-			{
-				"op":    "add",
-				"path":  epicgwv1.EPICConfigAnnotationPatch,
-				"value": configName,
-			},
-		}
-	}
-
-	// apply the patch
-	if patchBytes, err = json.Marshal(patch); err != nil {
-		return err
-	}
-	if err := cl.Patch(ctx, route, client.RawPatch(types.JSONPatchType, patchBytes)); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// removeEpicLink removes our annotations that indicate that the route
-// has been announced.
-func removeEpicLink(ctx context.Context, cl client.Client, route client.Object) error {
-	var (
-		patch      []map[string]interface{}
-		patchBytes []byte
-		err        error
-	)
-
-	// Remove our annotations, if present.
-	for annKey := range route.GetAnnotations() {
-		if annKey == epicgwv1.EPICLinkAnnotation {
-			patch = append(patch, map[string]interface{}{
-				"op":   "remove",
-				"path": epicgwv1.EPICLinkAnnotationPatch,
-			})
-		} else if annKey == epicgwv1.EPICConfigAnnotation {
-			patch = append(patch, map[string]interface{}{
-				"op":   "remove",
-				"path": epicgwv1.EPICConfigAnnotationPatch,
-			})
-		}
-	}
-
-	// apply the patch
-	if patchBytes, err = json.Marshal(patch); err != nil {
-		return err
-	}
-	if err := cl.Patch(ctx, route, client.RawPatch(types.JSONPatchType, patchBytes)); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// addSliceEpicLink adds our annotations that indicate that the slice
-// has been announced.
-func addSliceEpicLink(ctx context.Context, cl client.Client, slice *discoveryv1.EndpointSlice, link string, configName string, route client.Object) error {
-	kind := gatewayv1a2.Kind("HTTPRoute")
-	ns := gatewayv1a2.Namespace(route.GetNamespace())
-	name := gatewayv1a2.ObjectName(route.GetName())
-
-	shadow := epicgwv1.EndpointSliceShadow{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      slice.Name,
-			Namespace: slice.Namespace,
-		},
-		Spec: epicgwv1.EndpointSliceShadowSpec{
-			EPICConfigName: configName,
-			EPICLink:       link,
-			ParentRoutes: []gatewayv1a2.ParentReference{{
-				Kind:      &kind,
-				Namespace: &ns,
-				Name:      name,
-			}},
-		},
-	}
-
-	return cl.Create(ctx, &shadow)
-}
-
-func hasBeenAnnounced(ctx context.Context, cl client.Client, slice *discoveryv1.EndpointSlice) (bool, error) {
-	shadow := epicgwv1.EndpointSliceShadow{}
-	name := types.NamespacedName{Namespace: slice.Namespace, Name: slice.Name}
-	if err := cl.Get(ctx, name, &shadow); err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
-func maybeDelete(ctx context.Context, cl client.Client, route client.Object) error {
-	annotations := route.GetAnnotations()
-	link, announced := annotations[epicgwv1.EPICLinkAnnotation]
-	if announced {
-		// Get cached config name
-		configName, err := controllers.SplitNSName(annotations[epicgwv1.EPICConfigAnnotation])
-		if err != nil {
-			return err
-		}
-		epic, err := controllers.ConnectToEPIC(ctx, cl, &configName.Namespace, configName.Name)
-		if err != nil {
-			return err
-		}
-		err = epic.Delete(link)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// markRouteAccepted adds a Status Condition to indicate that the
-// route has been accepted by its parent.
-func markRouteAccepted(ctx context.Context, cl client.Client, l logr.Logger, routeKey client.ObjectKey) error {
-	return markRouteCondition(ctx, cl, l, routeKey, gatewayv1a2.RouteConditionAccepted, metav1.ConditionTrue, status.ReasonValid, "Announced to EPIC")
-}
-
-// markRouteRejected adds a Status Condition to indicate that the
-// route has been accepted by its parent.
-func markRouteRejected(ctx context.Context, cl client.Client, l logr.Logger, routeKey client.ObjectKey) error {
-	return markRouteCondition(ctx, cl, l, routeKey, gatewayv1a2.RouteConditionAccepted, metav1.ConditionFalse, status.ReasonGatewayAllowMismatch, "Reference not allowed by parent")
-}
-
-// markRouteCondition adds a Status Condition to the route.
-func markRouteCondition(ctx context.Context, cl client.Client, l logr.Logger, routeKey client.ObjectKey, cond gatewayv1a2.RouteConditionType, condStatus metav1.ConditionStatus, reason status.RouteReasonType, message string) error {
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		route := gatewayv1a2.HTTPRoute{}
-
-		// Fetch the resource here; you need to refetch it on every try,
-		// since if you got a conflict on the last update attempt then
-		// you need to get the current version before making your own
-		// changes.
-		if err := cl.Get(ctx, routeKey, &route); err != nil {
-			return err
-		}
-
-		var route2 *gatewayv1a2.HTTPRoute
-		for _, gwRef := range route.Spec.ParentRefs {
-			// Use Contour code to add/update the Route's Status Condition to
-			// "Ready" with respect to this Gateway.
-			rcu := status.RouteConditionsUpdate{
-				FullName:           types.NamespacedName{Namespace: route.Namespace, Name: route.Name},
-				Conditions:         make(map[gatewayv1a2.RouteConditionType]metav1.Condition),
-				ExistingConditions: nil,
-				GatewayRef:         namespacedNameOfParentRef(gwRef, routeKey.Namespace),
-				GatewayController:  controllers.GatewayController,
-				Generation:         route.Generation,
-				TransitionTime:     metav1.NewTime(time.Now()),
-			}
-			rcu.AddCondition(cond, condStatus, reason, message)
-
-			var ok bool
-			route2, ok = rcu.Mutate(&route).(*gatewayv1a2.HTTPRoute)
-			if !ok {
-				return fmt.Errorf("Failed to mutate Route")
-			}
-		}
-
-		// Try to update
-		return cl.Status().Update(ctx, route2)
-	})
-}
-
-// namespacedNameOfParentRef returns the NamespacedName of a
-// ParentRef.
-func namespacedNameOfParentRef(ref gatewayv1a2.ParentReference, defaultNS string) types.NamespacedName {
-	name := types.NamespacedName{Namespace: defaultNS, Name: string(ref.Name)}
-	if ref.Namespace != nil {
-		name.Namespace = string(*ref.Namespace)
-	}
-	return name
-}
-
-// namespacedNameOfHTTPBackendRef returns the NamespacedName of an
-// HTTPBackendRef.
-func namespacedNameOfHTTPBackendRef(ref gatewayv1a2.BackendRef, defaultNS string) types.NamespacedName {
-	name := types.NamespacedName{Namespace: defaultNS, Name: string(ref.Name)}
-	if ref.Namespace != nil {
-		name.Namespace = string(*ref.Namespace)
-	}
-	return name
 }

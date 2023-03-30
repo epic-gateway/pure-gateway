@@ -102,6 +102,14 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "HTTPRoute")
 		os.Exit(1)
 	}
+	tcpRouteReconciler := gatewaycontrollers.TCPRouteReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}
+	if err = tcpRouteReconciler.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "TCPRoute")
+		os.Exit(1)
+	}
 	if err = (&puregwcontrollers.GatewayClassConfigReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),

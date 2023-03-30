@@ -26,19 +26,19 @@ func GatewayEPICUID(gw gatewayv1a2.Gateway) string {
 
 // GatewayAllowsRoute checks whether gw allows attachment by route. If
 // error is nil then attachment is allowed but if not then it isn't.
-func GatewayAllowsRoute(gw gatewayv1a2.Gateway, route gatewayv1a2.HTTPRoute) error {
+func GatewayAllowsRoute(gw gatewayv1a2.Gateway, routeKind *gatewayv1a2.Kind) error {
 	for _, listener := range gw.Spec.Listeners {
-		if err := allowsRoute(listener.AllowedRoutes, &route); err != nil {
+		if err := allowsRoute(listener.AllowedRoutes, routeKind); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func allowsRoute(allow *gatewayv1a2.AllowedRoutes, route *gatewayv1a2.HTTPRoute) error {
+func allowsRoute(allow *gatewayv1a2.AllowedRoutes, routeKind *gatewayv1a2.Kind) error {
 	for _, gk := range allow.Kinds {
-		if gk.Kind != gatewayv1a2.Kind(route.Kind) {
-			return fmt.Errorf("Kind mismatch: %s vs %s", gk.Kind, route.Kind)
+		if &gk.Kind != routeKind {
+			return fmt.Errorf("Kind mismatch: %s vs %s", gk.Kind, *routeKind)
 		}
 	}
 	return nil

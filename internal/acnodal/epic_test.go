@@ -164,6 +164,7 @@ func TestRouteAnnouncements(t *testing.T) {
 		t.Errorf("got error %+v", err)
 	}
 
+	// HTTP Route
 	route := RouteSpec{
 		ClientRef: ClientRef{
 			ClusterID: "test",
@@ -171,9 +172,26 @@ func TestRouteAnnouncements(t *testing.T) {
 			Name:      GroupName,
 			UID:       "a044f348-f80c-4ac0-b911-6ed45e37994a",
 		},
-		HTTP: gatewayv1a2.HTTPRouteSpec{Hostnames: []gatewayv1a2.Hostname{"test-host", "other-host"}},
+		HTTP: &gatewayv1a2.HTTPRouteSpec{Hostnames: []gatewayv1a2.Hostname{"test-host", "other-host"}},
 	}
 	rt, err := e.AnnounceRoute(a.Links["create-route"], route)
+	if err != nil {
+		t.Errorf("got error %+v", err)
+	}
+
+	// Delete the Route
+	if err := e.Delete(rt.Links["self"]); err != nil {
+		t.Errorf("got error %+v", err)
+	}
+
+	// TCP Route
+	route.TCP = &gatewayv1a2.TCPRouteSpec{
+		CommonRouteSpec: gatewayv1a2.CommonRouteSpec{},
+		Rules:           []gatewayv1a2.TCPRouteRule{},
+	}
+	route.HTTP = nil
+
+	rt, err = e.AnnounceRoute(a.Links["create-route"], route)
 	if err != nil {
 		t.Errorf("got error %+v", err)
 	}

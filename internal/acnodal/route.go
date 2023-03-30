@@ -27,7 +27,8 @@ type RouteSpec struct {
 	// to this one.
 	ClientRef ClientRef `json:"clientRef,omitempty"`
 
-	HTTP gatewayv1a2.HTTPRouteSpec `json:"http,omitempty"`
+	HTTP *gatewayv1a2.HTTPRouteSpec `json:"http,omitempty"`
+	TCP  *gatewayv1a2.TCPRouteSpec  `json:"tcp,omitempty"`
 }
 
 // RouteResponse is the body of the HTTP response to a request to show

@@ -85,6 +85,14 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "HTTPRouteAgent")
 		os.Exit(1)
 	}
+	tcpRouteReconciler := gatewaycontrollers.TCPRouteAgentReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}
+	if err = tcpRouteReconciler.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "TCPRouteAgent")
+		os.Exit(1)
+	}
 	gwClassConfigReconciler := puregwcontrollers.GatewayClassConfigAgentReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
