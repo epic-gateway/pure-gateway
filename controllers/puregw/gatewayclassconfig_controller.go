@@ -17,10 +17,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	epicgwv1 "acnodal.io/puregw/apis/puregw/v1"
-	"acnodal.io/puregw/controllers"
-	"acnodal.io/puregw/internal/contour/status"
-	"acnodal.io/puregw/internal/gateway"
+	epicgwv1 "epic-gateway.org/puregw/apis/puregw/v1"
+	"epic-gateway.org/puregw/controllers"
+	"epic-gateway.org/puregw/internal/contour/status"
+	"epic-gateway.org/puregw/internal/gateway"
 )
 
 var (

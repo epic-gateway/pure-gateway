@@ -19,8 +19,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	"acnodal.io/puregw/controllers"
-	"acnodal.io/puregw/internal/trueingress"
+	"epic-gateway.org/puregw/controllers"
+	"epic-gateway.org/puregw/internal/trueingress"
 )
 
 // TCPRouteAgentReconciler reconciles a Gateway object

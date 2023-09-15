@@ -13,9 +13,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	epicgwv1 "acnodal.io/puregw/apis/puregw/v1"
-	"acnodal.io/puregw/controllers"
-	ti "acnodal.io/puregw/internal/trueingress"
+	epicgwv1 "epic-gateway.org/puregw/apis/puregw/v1"
+	"epic-gateway.org/puregw/controllers"
+	ti "epic-gateway.org/puregw/internal/trueingress"
 )
 
 // GatewayClassConfigAgentReconciler reconciles a GatewayClassConfig object

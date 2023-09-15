@@ -73,19 +73,19 @@ func addQueueDiscipline(l logr.Logger, nic string) error {
 
 func addFilter(l logr.Logger, nic string, function string, direction string) error {
 	// add the pfc_{encap|decap}_tc filter to the nic if it's not already there
-	return runScript(l, fmt.Sprintf("/usr/sbin/tc filter show dev %[1]s %[3]s | /usr/bin/grep pfc_%[2]s_tc || /usr/sbin/tc filter add dev %[1]s %[3]s bpf direct-action object-file /opt/acnodal/bin/pfc_%[2]s_tc.o sec .text", nic, function, direction))
+	return runScript(l, fmt.Sprintf("/usr/sbin/tc filter show dev %[1]s %[3]s | /usr/bin/grep pfc_%[2]s_tc || /usr/sbin/tc filter add dev %[1]s %[3]s bpf direct-action object-file /opt/puregw/bin/pfc_%[2]s_tc.o sec .text", nic, function, direction))
 }
 
 func configureTrueIngress(l logr.Logger, nic string, qid int, flags int, name string) error {
-	return runScript(l, fmt.Sprintf("/opt/acnodal/bin/cli_cfg set %[1]s %[2]d %[3]d %[4]s", nic, qid, flags, name))
+	return runScript(l, fmt.Sprintf("/opt/puregw/bin/cli_cfg set %[1]s %[2]d %[3]d %[4]s", nic, qid, flags, name))
 }
 
 // SetTunnel sets the parameters needed by one PFC tunnel.
 func SetTunnel(l logr.Logger, tunnelID uint32, tunnelAddr string, myAddr string, tunnelPort int32) error {
-	return runScript(l, fmt.Sprintf("/opt/acnodal/bin/cli_tunnel set %[1]d %[3]s %[4]d %[2]s %[4]d", tunnelID, tunnelAddr, myAddr, tunnelPort))
+	return runScript(l, fmt.Sprintf("/opt/puregw/bin/cli_tunnel set %[1]d %[3]s %[4]d %[2]s %[4]d", tunnelID, tunnelAddr, myAddr, tunnelPort))
 }
 
 // SetService sets the parameters needed by one PFC service.
 func SetService(l logr.Logger, tunnelAuth string, tunnelID uint32) error {
-	return runScript(l, fmt.Sprintf("/opt/acnodal/bin/cli_service set-node %[1]d %[2]d %[3]s %[4]d", tunnelID>>16, tunnelID&0xffff, tunnelAuth, tunnelID))
+	return runScript(l, fmt.Sprintf("/opt/puregw/bin/cli_service set-node %[1]d %[2]d %[3]s %[4]d", tunnelID>>16, tunnelID&0xffff, tunnelAuth, tunnelID))
 }

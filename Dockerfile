@@ -19,7 +19,6 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager ./cmd/manager/m
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o agent ./cmd/agent/main.go
 
 FROM ubuntu:20.04 as runtime
-ARG GITLAB_TOKEN
 
 # Install some prerequisites that TrueIngress needs
 RUN apt-get update && apt-get install -y curl libelf1 iproute2
@@ -28,10 +27,10 @@ RUN apt-get update && apt-get install -y curl libelf1 iproute2
 RUN apt-get install -y tcpdump
 
 # Download the packet forwarding components from the true-ingress project
-RUN mkdir -p /opt/acnodal/bin
-RUN curl --silent --show-error -L -H "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
-https://gitlab.com/api/v4/projects/acnodal%2Fepic%2Ftrue-ingress/packages/generic/true-ingress/v0.16.0/true-ingress.tar.bz2 | \
-tar -C /opt/acnodal -xjf -
+RUN mkdir -p /opt/puregw/bin
+RUN curl --silent --show-error -L \
+https://github.com/epic-gateway/true-ingress/releases/download/v0.22.4/true-ingress.tar.bz2 | \
+tar -C /opt/puregw -xjf -
 
 WORKDIR /
 COPY --from=builder /workspace/manager .

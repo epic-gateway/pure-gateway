@@ -21,7 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapi_v1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	"acnodal.io/puregw/internal/contour/gatewayapi"
+	"epic-gateway.org/puregw/internal/contour/gatewayapi"
 )
 
 type GatewayReasonType string

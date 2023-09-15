@@ -1,4 +1,4 @@
-module acnodal.io/puregw
+module epic-gateway.org/puregw
 
 go 1.19
 

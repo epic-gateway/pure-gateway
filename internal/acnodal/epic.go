@@ -18,7 +18,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	"acnodal.io/puregw/internal/gateway"
+	"epic-gateway.org/puregw/internal/gateway"
 )
 
 const (

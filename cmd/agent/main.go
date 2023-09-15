@@ -23,11 +23,11 @@ import (
 
 	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	epicgwv1 "acnodal.io/puregw/apis/puregw/v1"
-	ti "acnodal.io/puregw/internal/trueingress"
+	epicgwv1 "epic-gateway.org/puregw/apis/puregw/v1"
+	ti "epic-gateway.org/puregw/internal/trueingress"
 
-	gatewaycontrollers "acnodal.io/puregw/controllers/gateway"
-	puregwcontrollers "acnodal.io/puregw/controllers/puregw"
+	gatewaycontrollers "epic-gateway.org/puregw/controllers/gateway"
+	puregwcontrollers "epic-gateway.org/puregw/controllers/puregw"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -58,7 +58,7 @@ func main() {
 	setupLog.Info("Hello there!")
 
 	// Start the GUE ping utility.
-	pinger := exec.Command("/opt/acnodal/bin/gue_ping_svc_auto", "25")
+	pinger := exec.Command("/opt/puregw/bin/gue_ping_svc_auto", "25")
 	err := pinger.Start()
 	if err != nil {
 		setupLog.Error(err, "Starting pinger")
