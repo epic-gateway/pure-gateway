@@ -6,9 +6,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.7.0
   creationTimestamp: null
-  name: endpointsliceshadows.puregw.acnodal.io
+  name: endpointsliceshadows.puregw.epic-gateway.org
 spec:
-  group: puregw.acnodal.io
+  group: puregw.epic-gateway.org
   names:
     kind: EndpointSliceShadow
     listKind: EndpointSliceShadowList

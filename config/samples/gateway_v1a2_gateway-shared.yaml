@@ -5,7 +5,7 @@ metadata:
   name: epic-sample
   annotations:
     # This needs to be edited to match the sharing key of the Gateway that we want to share
-    acnodal.io/epic-sharing-key: 75d5fb54-d38a-483f-9d62-a6357e8c8f0d
+    epic-gateway.org/epic-sharing-key: 75d5fb54-d38a-483f-9d62-a6357e8c8f0d
 spec:
   gatewayClassName: epic-sample
   listeners:

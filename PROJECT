@@ -1,26 +1,26 @@
-domain: acnodal.io
+domain: epic-gateway.org
 layout:
 - go.kubebuilder.io/v3
 multigroup: true
 plugins:
   manifests.sdk.operatorframework.io/v2: {}
   scorecard.sdk.operatorframework.io/v2: {}
-projectName: puregw
+projectName: pure-gateway
 
 # This is a lie, but for some reason kubebuilder uses this field as
 # the module, instead of the "module" field in go.mod, so if we want
 # our generated stuff to have the correct module we need to do this.
-repo: acnodal.io/puregw
+repo: epic-gateway.org/puregw
 
 resources:
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: acnodal.io
+  domain: epic-gateway.org
   group: puregw
   kind: GatewayClassConfig
-  path: acnodal.io/puregw/apis/puregw/v1
+  path: puregw.epic-gateway.org/apis/puregw/v1
   version: v1
 - controller: true
   domain: networking.k8s.io
@@ -40,10 +40,10 @@ resources:
 - api:
     crdVersion: v1
     namespaced: true
-  domain: acnodal.io
+  domain: epic-gateway.org
   group: puregw
   kind: EndpointSliceShadow
-  path: acnodal.io/puregw/apis/puregw/v1
+  path: puregw.epic-gateway.org/apis/puregw/v1
   version: v1
 - controller: true
   domain: networking.k8s.io

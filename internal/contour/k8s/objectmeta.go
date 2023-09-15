@@ -20,7 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	"acnodal.io/puregw/internal/annotation"
+	"epic-gateway.org/puregw/internal/annotation"
 )
 
 // NamespacedNameOf returns the NamespacedName of any given Kubernetes object.

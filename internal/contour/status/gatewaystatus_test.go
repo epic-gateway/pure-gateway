@@ -16,8 +16,8 @@ package status
 import (
 	"testing"
 
-	"acnodal.io/puregw/internal/contour/gatewayapi"
-	"acnodal.io/puregw/internal/contour/k8s"
+	"epic-gateway.org/puregw/internal/contour/gatewayapi"
+	"epic-gateway.org/puregw/internal/contour/k8s"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

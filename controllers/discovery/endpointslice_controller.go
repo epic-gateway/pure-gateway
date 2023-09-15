@@ -17,10 +17,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	epicgwv1 "acnodal.io/puregw/apis/puregw/v1"
-	"acnodal.io/puregw/controllers"
-	"acnodal.io/puregw/internal/acnodal"
-	"acnodal.io/puregw/internal/trueingress"
+	epicgwv1 "epic-gateway.org/puregw/apis/puregw/v1"
+	"epic-gateway.org/puregw/controllers"
+	"epic-gateway.org/puregw/internal/acnodal"
+	"epic-gateway.org/puregw/internal/trueingress"
 )
 
 // EndpointSliceReconciler reconciles a EndpointSlice object
@@ -39,7 +39,7 @@ func (r *EndpointSliceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 //+kubebuilder:rbac:groups=discovery.k8s.io,resources=endpointslices,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=discovery.k8s.io,resources=endpointslices/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=discovery.k8s.io,resources=endpointslices/finalizers,verbs=update
-//+kubebuilder:rbac:groups=puregw.acnodal.io,resources=endpointsliceshadows,verbs=get;list;watch;delete
+//+kubebuilder:rbac:groups=puregw.epic-gateway.org,resources=endpointsliceshadows,verbs=get;list;watch;delete
 
 // Reconcile updates EPIC with the current EndpointSlice contents.
 func (r *EndpointSliceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

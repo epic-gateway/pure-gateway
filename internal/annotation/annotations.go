@@ -21,7 +21,7 @@ import (
 	networking_v1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"acnodal.io/puregw/internal/timeout"
+	"epic-gateway.org/puregw/internal/timeout"
 )
 
 // IsKnown checks if an annotation is one Contour knows about.

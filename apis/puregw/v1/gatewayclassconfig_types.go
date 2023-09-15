@@ -18,7 +18,7 @@ type EPIC struct {
 	// ClusterName is used to tag resources on the EPIC server. It's
 	// purely informative but it's helpful to have each client cluster
 	// have a different name.
-	// +kubebuilder:default="epic-gateway"
+	// +kubebuilder:default="pure-gateway"
 	ClusterName string `json:"cluster-name,omitempty"`
 
 	Host       string `json:"gateway-hostname"`

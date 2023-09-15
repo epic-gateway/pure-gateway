@@ -5,7 +5,7 @@ metadata:
   name: gatewayclassconfig-editor-role
 rules:
 - apiGroups:
-  - puregw.acnodal.io
+  - puregw.epic-gateway.org
   resources:
   - gatewayclassconfigs
   verbs:
@@ -17,7 +17,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - puregw.acnodal.io
+  - puregw.epic-gateway.org
   resources:
   - gatewayclassconfigs/status
   verbs:

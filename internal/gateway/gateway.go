@@ -5,7 +5,7 @@ import (
 
 	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	epicgwv1 "acnodal.io/puregw/apis/puregw/v1"
+	epicgwv1 "epic-gateway.org/puregw/apis/puregw/v1"
 )
 
 // GatewayEPICUID returns this Gateway's EPIC UID. This can be either

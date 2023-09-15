@@ -7,10 +7,10 @@ import (
 )
 
 const (
-	GatewayController = gatewayv1a2.GatewayController("acnodal.io/epic")
+	GatewayController = gatewayv1a2.GatewayController("epic-gateway.org/puregw")
 
-	agentFinalizerPrefix = "epic.acnodal.io/agent_"
-	FinalizerName        = "epic.acnodal.io/controller"
+	agentFinalizerPrefix = "puregw.epic-gateway.org/agent_"
+	FinalizerName        = "puregw.epic-gateway.org/manager"
 )
 
 // AgentFinalizerName returns the finalizer name for the given

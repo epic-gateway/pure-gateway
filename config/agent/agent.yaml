@@ -2,18 +2,18 @@
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: controller-agent
+  name: agent
   namespace: system
   labels:
-    control-plane: controller-agent
+    control-plane: agent
 spec:
   selector:
     matchLabels:
-      control-plane: controller-agent
+      control-plane: agent
   template:
     metadata:
       labels:
-        control-plane: controller-agent
+        control-plane: agent
     spec:
       containers:
       - name: agent
@@ -50,7 +50,7 @@ spec:
           initialDelaySeconds: 5
           periodSeconds: 10
       hostNetwork: true
-      serviceAccountName: controller-manager
+      serviceAccountName: manager
       terminationGracePeriodSeconds: 5
       tolerations:
       - effect: NoSchedule

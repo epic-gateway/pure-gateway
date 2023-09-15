@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/core/v1"
 
-	"acnodal.io/puregw/internal/contour/fixture"
+	"epic-gateway.org/puregw/internal/contour/fixture"
 )
 
 func TestValidTLSSecret(t *testing.T) {

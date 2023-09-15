@@ -4,7 +4,7 @@ Copyright 2022 Acnodal.
 
 // Package v1 contains API Schema definitions for the puregw v1 API group
 // +kubebuilder:object:generate=true
-// +groupName=puregw.acnodal.io
+// +groupName=puregw.epic-gateway.org
 package v1
 
 import (
@@ -14,7 +14,7 @@ import (
 
 const (
 	// Group is the name of this group.
-	Group = "puregw.acnodal.io"
+	Group = "puregw.epic-gateway.org"
 )
 
 var (

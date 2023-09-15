@@ -1,0 +1,40 @@
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - uses: actions/setup-go@v4
+      with: {go-version: '=1.19.8'}
+
+    - name: Decide what we're going to call this
+      run: |
+        VERSION=${{ github.ref_name }}
+        # if we're building from a branch (i.e., not a tag) then add
+        # the short sha so we can have more than one build per branch
+        if [[ ${{ github.ref }} != refs/tags/* ]]; then
+          VERSION=${VERSION}-$(git rev-parse --short HEAD)
+        fi
+        echo ${VERSION}
+        echo "VERSION=${VERSION}" >> ${GITHUB_ENV}
+
+    - name: Make
+      run: |
+        make VERSION=${VERSION} check image-build
+
+    - name: Push
+      run: |
+        docker login -u epic-gateway+github_actions -p ${{ secrets.QUAY_EPIC_GATEWAY }} quay.io
+        make VERSION=${VERSION} image-push
+
+    - name: Create a new pre-release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: "marvinpinto/action-automatic-releases@latest"
+      with:
+        repo_token: "${{ secrets.GITHUB_TOKEN }}"
+        files: |
+          deploy/pure-gateway.yaml
+          deploy/pure-gateway-development.yaml

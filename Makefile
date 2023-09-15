@@ -1,5 +1,4 @@
 # VERSION defines the project version for the bundle.
-# Update this value when you upgrade the version of your project.
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
 # - use the VERSION as arg of the bundle target (e.g make bundle VERSION=v0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=v0.0.2)
@@ -10,10 +9,10 @@ VERSION ?= v0.0.0-${USER}-dev
 #
 # For example, running 'make bundle-build bundle-push catalog-build catalog-push' will build and push both
 # puregw.io/puregw-bundle:$VERSION and puregw.io/puregw-catalog:$VERSION.
-IMAGE_TAG_BASE ?= registry.gitlab.com/acnodal/public
+IMAGE_TAG_BASE ?= quay.io/epic-gateway
 
 # Image URL to use all building/pushing image targets
-IMG ?= ${IMAGE_TAG_BASE}/controller:${VERSION}
+IMG ?= ${IMAGE_TAG_BASE}/pure-gateway:${VERSION}
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.22
 
@@ -55,10 +54,10 @@ generate: ## Generate code and manifests
 	cp config/manager/kustomization.yaml ${CACHE}/kustomization-manager.yaml
 	cd config/agent && $(KUSTOMIZE) edit set image controller=${IMG}
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build config/default > deploy/epic-gateway.yaml
-	$(KUSTOMIZE) build config/development > deploy/epic-gateway-development.yaml
-	cp deploy/epic-gateway.yaml deploy/epic-gateway-${VERSION}.yaml
-	cp deploy/epic-gateway-development.yaml deploy/epic-gateway-development-${VERSION}.yaml
+	$(KUSTOMIZE) build config/default > deploy/pure-gateway.yaml
+	$(KUSTOMIZE) build config/development > deploy/pure-gateway-development.yaml
+	cp deploy/pure-gateway.yaml deploy/pure-gateway-${VERSION}.yaml
+	cp deploy/pure-gateway-development.yaml deploy/pure-gateway-development-${VERSION}.yaml
 # restore kustomization.yaml
 	cp ${CACHE}/kustomization-agent.yaml config/agent/kustomization.yaml
 	cp ${CACHE}/kustomization-manager.yaml config/manager/kustomization.yaml
@@ -92,12 +91,10 @@ run: generate fmt vet ## Run a controller from your host.
 run-agent: generate fmt vet ## Run an agent from your host.
 	EPIC_NODE_NAME=mk8s1 EPIC_HOST_IP=192.168.254.101 go run ./cmd/agent/...
 
-docker-build: ## Build docker image.
-	docker build -t ${IMG} \
-	--build-arg GITLAB_TOKEN \
-	.
+image-build: ## Build the container image.
+	docker build -t ${IMG} .
 
-docker-push: ## Push docker image to the registry.
+image-push: ## Push the container image to the registry.
 	docker push ${IMG}
 
 ##@ Deployment
@@ -109,7 +106,7 @@ uninstall: ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/crd | kubectl delete -f -
 
 deploy: generate ## Deploy to the K8s cluster specified in ~/.kube/config.
-	kubectl apply -f deploy/epic-gateway.yaml
+	kubectl apply -f deploy/pure-gateway.yaml
 
 undeploy: generate ## Undeploy from the K8s cluster specified in ~/.kube/config.
-	kubectl delete -f deploy/epic-gateway.yaml
+	kubectl delete -f deploy/pure-gateway.yaml

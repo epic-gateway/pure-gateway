@@ -5,7 +5,7 @@ metadata:
   name: endpointsliceshadow-viewer-role
 rules:
 - apiGroups:
-  - puregw.acnodal.io
+  - puregw.epic-gateway.org
   resources:
   - endpointsliceshadows
   verbs:
@@ -13,7 +13,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - puregw.acnodal.io
+  - puregw.epic-gateway.org
   resources:
   - endpointsliceshadows/status
   verbs:

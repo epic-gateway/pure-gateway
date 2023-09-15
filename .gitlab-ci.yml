@@ -55,7 +55,7 @@ generate:
 
 build-image:
   stage: build
-  script: make GOBIN=dontcare VERSION=${TAG_SPECIFIC} docker-build docker-push
+  script: make GOBIN=dontcare VERSION=${TAG_SPECIFIC} image-build image-push
 
 k8s-manifest:
   stage: build

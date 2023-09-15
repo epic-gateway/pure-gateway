@@ -8,8 +8,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	epicgwv1 "acnodal.io/puregw/apis/puregw/v1"
-	"acnodal.io/puregw/internal/acnodal"
+	epicgwv1 "epic-gateway.org/puregw/apis/puregw/v1"
+	"epic-gateway.org/puregw/internal/acnodal"
 )
 
 func ConnectToEPIC(ctx context.Context, cl client.Client, namespace *string, name string) (acnodal.EPIC, error) {

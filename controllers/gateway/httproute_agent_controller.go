@@ -23,11 +23,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	epicgwv1 "acnodal.io/puregw/apis/puregw/v1"
-	"acnodal.io/puregw/controllers"
-	"acnodal.io/puregw/internal/acnodal"
-	"acnodal.io/puregw/internal/trueingress"
-	ti "acnodal.io/puregw/internal/trueingress"
+	epicgwv1 "epic-gateway.org/puregw/apis/puregw/v1"
+	"epic-gateway.org/puregw/controllers"
+	"epic-gateway.org/puregw/internal/acnodal"
+	"epic-gateway.org/puregw/internal/trueingress"
+	ti "epic-gateway.org/puregw/internal/trueingress"
 )
 
 // HTTPRouteAgentReconciler reconciles a Gateway object
@@ -51,7 +51,7 @@ func (r *HTTPRouteAgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes/finalizers,verbs=update
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gatewayclasses,verbs=get;list;watch
-//+kubebuilder:rbac:groups=puregw.acnodal.io,resources=gatewayclassconfigs,verbs=get
+//+kubebuilder:rbac:groups=puregw.epic-gateway.org,resources=gatewayclassconfigs,verbs=get
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.

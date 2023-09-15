@@ -6,9 +6,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.7.0
   creationTimestamp: null
-  name: gatewayclassconfigs.puregw.acnodal.io
+  name: gatewayclassconfigs.puregw.epic-gateway.org
 spec:
-  group: puregw.acnodal.io
+  group: puregw.epic-gateway.org
   names:
     kind: GatewayClassConfig
     listKind: GatewayClassConfigList
@@ -45,7 +45,7 @@ spec:
                   Enterprise Gateway.
                 properties:
                   cluster-name:
-                    default: epic-gateway
+                    default: pure-gateway
                     description: ClusterName is used to tag resources on the EPIC
                       server. It's purely informative but it's helpful to have each
                       client cluster have a different name.

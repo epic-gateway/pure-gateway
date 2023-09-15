@@ -22,10 +22,10 @@ import (
 
 	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	epicgwv1 "acnodal.io/puregw/apis/puregw/v1"
-	discoverycontrollers "acnodal.io/puregw/controllers/discovery"
-	gatewaycontrollers "acnodal.io/puregw/controllers/gateway"
-	puregwcontrollers "acnodal.io/puregw/controllers/puregw"
+	epicgwv1 "epic-gateway.org/puregw/apis/puregw/v1"
+	discoverycontrollers "epic-gateway.org/puregw/controllers/discovery"
+	gatewaycontrollers "epic-gateway.org/puregw/controllers/gateway"
+	puregwcontrollers "epic-gateway.org/puregw/controllers/puregw"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -65,7 +65,7 @@ func main() {
 		Port:                   9443,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "3ea9bd30.epic.acnodal.io",
+		LeaderElectionID:       "3ea9bd30.epic-gateway.org",
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")

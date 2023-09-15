@@ -18,7 +18,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	"acnodal.io/puregw/internal/gateway"
+	"epic-gateway.org/puregw/internal/gateway"
 )
 
 const (
@@ -26,7 +26,7 @@ const (
 	errorMessageHeader = "x-epic-error-message"
 )
 
-// EPIC represents one connection to an Acnodal Enterprise Gateway.
+// EPIC represents one connection to an EPIC Gateway.
 type EPIC interface {
 	GetAccount() (AccountResponse, error)
 	GetGroup() (GroupResponse, error)
@@ -41,7 +41,7 @@ type EPIC interface {
 	UpdateRoute(url string, spec RouteSpec) (*RouteResponse, error)
 }
 
-// epic represents one connection to an Acnodal Enterprise Gateway.
+// epic represents one connection to an EPIC Gateway.
 type epic struct {
 	http       resty.Client
 	groupURL   string

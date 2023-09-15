@@ -16,7 +16,7 @@ package dag
 import (
 	"fmt"
 
-	"acnodal.io/puregw/internal/contour/status"
+	"epic-gateway.org/puregw/internal/contour/status"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

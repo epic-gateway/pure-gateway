@@ -1,5 +1,5 @@
 ---
-apiVersion: puregw.acnodal.io/v1
+apiVersion: puregw.epic-gateway.org/v1
 kind: GatewayClassConfig
 metadata:
   name: epic-sample
