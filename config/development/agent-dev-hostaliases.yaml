@@ -8,6 +8,9 @@ spec:
   template:
     spec:
       hostAliases:
+      - ip: 192.168.254.21
+        hostnames:
+        - gwdev-ctl
       - ip: 192.168.254.200
         hostnames:
         - acndev-ctl
