@@ -29,7 +29,7 @@ RUN apt-get install -y tcpdump
 # Download the packet forwarding components from the true-ingress project
 RUN mkdir -p /opt/acnodal/bin
 RUN curl --silent --show-error -L \
-https://github.com/epic-gateway/true-ingress/releases/download/v0.22.4/true-ingress.tar.bz2 | \
+https://github.com/epic-gateway/true-ingress/releases/download/v0.24.0-options10/true-ingress.tar.bz2 | \
 tar -C /opt/acnodal -xjf -
 
 WORKDIR /
