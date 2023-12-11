@@ -221,7 +221,7 @@ func setupTunnel(l logr.Logger, spec epicgwv1.TrueIngress, clientAddress string,
 	if err != nil {
 		return err
 	}
-	ti.SetupNIC(l, encapIntf.Attrs().Name, "encap", spec.EncapAttachment.Direction, spec.EncapAttachment.QID, spec.EncapAttachment.Flags, encapIntf.Attrs().Name)
+	ti.SetupNIC(l, encapIntf.Attrs().Name, "encap", spec.EncapAttachment.Direction, spec.EncapAttachment.QID, spec.EncapAttachment.Flags)
 
 	// In a cluster running the Amazon VPC CNI we need to attach the
 	// encapper to all of the ENI interfaces, not just the default.
@@ -234,7 +234,7 @@ func setupTunnel(l logr.Logger, spec epicgwv1.TrueIngress, clientAddress string,
 			// The secondary ENIs need to have the FWD(4) flag set, and we
 			// add a "+ENI" suffix to the name to indicate that we changed
 			// the user's flags
-			ti.SetupNIC(l, eni.Name, "encap", spec.EncapAttachment.Direction, spec.EncapAttachment.QID, spec.EncapAttachment.Flags|ti.ExplicitPacketForward, eni.Name+"+ENI")
+			ti.SetupNIC(l, eni.Name, "encap", spec.EncapAttachment.Direction, spec.EncapAttachment.QID, spec.EncapAttachment.Flags|ti.ExplicitPacketForward)
 		}
 	}
 
@@ -243,7 +243,7 @@ func setupTunnel(l logr.Logger, spec epicgwv1.TrueIngress, clientAddress string,
 	if err != nil {
 		return err
 	}
-	ti.SetupNIC(l, decapIntf.Attrs().Name, "decap", spec.DecapAttachment.Direction, spec.DecapAttachment.QID, spec.DecapAttachment.Flags, decapIntf.Attrs().Name)
+	ti.SetupNIC(l, decapIntf.Attrs().Name, "decap", spec.DecapAttachment.Direction, spec.DecapAttachment.QID, spec.DecapAttachment.Flags)
 
 	// Determine the IP address to use for this end of the tunnel. It
 	// can be any address on the decap interface in the same family as
