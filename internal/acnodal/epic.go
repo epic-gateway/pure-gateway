@@ -100,10 +100,6 @@ type GatewaySpec struct {
 	Address     string           `json:"public-address,omitempty"`
 	Ports       []v1.ServicePort `json:"public-ports"`
 
-	// TunnelKey authenticates the client with the EPIC. It must be a
-	// base64-encoded 128-bit value.
-	TunnelKey string `json:"tunnel-key,omitempty"`
-
 	// GUETunnelEndpoints is a map of maps. The outer map is from client
 	// node addresses to public GUE tunnel endpoints on the EPIC. The
 	// map key is a client node address and must be one of the node

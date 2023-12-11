@@ -201,7 +201,7 @@ func setupTunnels(l logr.Logger, gw *gatewayv1a2.Gateway, spec epicgwv1.TrueIngr
 				// Now that we've got the service response we have enough
 				// info to set up this tunnel.
 				for _, myTunnel := range myTunnels.EPICEndpoints {
-					err = setupTunnel(l, spec, address, myTunnel, svcResponse.Gateway.Spec.TunnelKey, isEKS)
+					err = setupTunnel(l, spec, address, myTunnel, isEKS)
 					if err != nil {
 						l.Error(err, "SetupPFC")
 					}
@@ -215,7 +215,7 @@ func setupTunnels(l logr.Logger, gw *gatewayv1a2.Gateway, spec epicgwv1.TrueIngr
 
 // setupTunnel sets up the Acnodal PFC components and GUE tunnel to
 // communicate with the Acnodal EPIC.
-func setupTunnel(l logr.Logger, spec epicgwv1.TrueIngress, clientAddress string, epicEndpoint acnodal.TunnelEndpoint, tunnelAuth string, isEKS bool) error {
+func setupTunnel(l logr.Logger, spec epicgwv1.TrueIngress, clientAddress string, epicEndpoint acnodal.TunnelEndpoint, isEKS bool) error {
 	// Determine the interface to which to attach the Encap PFC
 	encapIntf, err := interfaceOrDefault(spec.EncapAttachment.Interface, clientAddress)
 	if err != nil {
@@ -266,7 +266,7 @@ func setupTunnel(l logr.Logger, spec epicgwv1.TrueIngress, clientAddress string,
 
 	// set up service forwarding to forward packets through the GUE
 	// tunnel
-	return ti.SetService(l, tunnelAuth, epicEndpoint.TunnelID)
+	return ti.SetService(l, epicEndpoint.TunnelID)
 }
 
 // interfaceOrDefault returns info about an interface. If intName is
