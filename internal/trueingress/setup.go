@@ -87,5 +87,5 @@ func SetTunnel(l logr.Logger, tunnelID uint32, tunnelAddr string, myAddr string,
 
 // SetService sets the parameters needed by one PFC service.
 func SetService(l logr.Logger, tunnelID uint32) error {
-	return runScript(l, fmt.Sprintf("/opt/acnodal/bin/cli_service set-node %[1]d %[2]d %[3]d", tunnelID>>16, tunnelID&0xffff, tunnelID))
+	return runScript(l, fmt.Sprintf("/opt/acnodal/bin/cli_service set-node %[1]d", tunnelID))
 }
