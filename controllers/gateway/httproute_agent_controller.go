@@ -258,15 +258,7 @@ func setupTunnel(l logr.Logger, spec epicgwv1.TrueIngress, clientAddress string,
 	}
 
 	// set up the GUE tunnel to the EPIC
-	err = ti.SetTunnel(l, epicEndpoint.TunnelID, epicEndpoint.Address, addrs[0].IP.String(), epicEndpoint.Port.Port)
-	if err != nil {
-		l.Error(err, "SetTunnel")
-		return err
-	}
-
-	// set up service forwarding to forward packets through the GUE
-	// tunnel
-	return ti.SetService(l, epicEndpoint.TunnelID)
+	return ti.SetTunnel(l, epicEndpoint.TunnelID, epicEndpoint.Address, addrs[0].IP.String(), epicEndpoint.Port.Port)
 }
 
 // interfaceOrDefault returns info about an interface. If intName is

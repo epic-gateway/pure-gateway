@@ -84,8 +84,3 @@ func configureTrueIngress(l logr.Logger, nic string, qid int, flags int) error {
 func SetTunnel(l logr.Logger, tunnelID uint32, tunnelAddr string, myAddr string, tunnelPort int32) error {
 	return runScript(l, fmt.Sprintf("/opt/acnodal/bin/cli_tunnel set %[1]d %[3]s %[4]d %[2]s %[4]d", tunnelID, tunnelAddr, myAddr, tunnelPort))
 }
-
-// SetService sets the parameters needed by one PFC service.
-func SetService(l logr.Logger, tunnelID uint32) error {
-	return runScript(l, fmt.Sprintf("/opt/acnodal/bin/cli_service set-node %[1]d", tunnelID))
-}
