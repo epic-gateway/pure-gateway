@@ -576,7 +576,7 @@ func maybeDelete(ctx context.Context, cl client.Client, route client.Object) err
 // markRouteAccepted adds a Status Condition to indicate that the
 // route has been accepted by its parent.
 func markRouteAccepted(ctx context.Context, cl client.Client, l logr.Logger, routeKey client.ObjectKey) error {
-	return markRouteCondition(ctx, cl, l, routeKey, gatewayv1a2.RouteConditionAccepted, metav1.ConditionTrue, status.ReasonValid, "Announced to EPIC")
+	return markRouteCondition(ctx, cl, l, routeKey, gatewayv1a2.RouteConditionAccepted, metav1.ConditionTrue, status.ReasonAccepted, "Announced to EPIC")
 }
 
 // markRouteRejected adds a Status Condition to indicate that the
