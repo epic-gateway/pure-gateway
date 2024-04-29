@@ -19,7 +19,7 @@ ENVTEST_K8S_VERSION = 1.22
 # Tools that we use.
 CONTROLLER_GEN = go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.7.0
 KUSTOMIZE = go run sigs.k8s.io/kustomize/kustomize/v4@v4.5.2
-ENVTEST = go run sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+ENVTEST = go run sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.0.0-20231206145619-1ea2be573f78
 
 # Setting SHELL to bash allows bash commands to be executed by recipes.
 # This is a requirement for 'setup-envtest.sh' in the test target.
