@@ -73,8 +73,7 @@ vet: ## Run go vet against code.
 unit-test: generate fmt vet ## Run unit tests (no external resources needed).
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -short -coverprofile cover.out
 
-check: generate fmt vet ## Run "short" tests only.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -short -coverprofile cover.out
+check: unit-test ## Run "short" tests only.
 
 test: generate fmt vet ## Run all tests, even ones that need external resources.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
