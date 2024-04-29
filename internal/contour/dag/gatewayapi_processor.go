@@ -30,7 +30,7 @@ const (
 
 type Fetcher interface {
 	GetSecret(name types.NamespacedName) (*v1.Secret, error)
-	GetGrants(ns string) (gatewayapi_v1alpha2.ReferencePolicyList, error)
+	GetGrants(ns string) (gatewayapi_v1alpha2.ReferenceGrantList, error)
 }
 
 func isSecretRef(certificateRef gatewayapi_v1alpha2.SecretObjectReference) bool {
@@ -66,7 +66,7 @@ func ValidGatewayTLS(gateway gatewayapi_v1alpha2.Gateway, listenerTLS gatewayapi
 	}
 
 	// If the secret is in a different namespace than the gateway, then we need to
-	// check for a ReferencePolicy or ReferenceGrant that allows the reference.
+	// check for a ReferenceGrant or ReferenceGrant that allows the reference.
 	if certificateRef.Namespace != nil && string(*certificateRef.Namespace) != gateway.Namespace {
 		grants, err := cb.GetGrants(gateway.Namespace)
 		if err != nil {
@@ -91,7 +91,7 @@ func ValidGatewayTLS(gateway gatewayapi_v1alpha2.Gateway, listenerTLS gatewayapi
 				gatewayapi_v1alpha2.ListenerConditionResolvedRefs,
 				metav1.ConditionFalse,
 				gatewayapi_v1alpha2.ListenerReasonInvalidCertificateRef,
-				fmt.Sprintf("Spec.VirtualHost.TLS.CertificateRefs %q namespace must match the Gateway's namespace or be covered by a ReferencePolicy/ReferenceGrant", certificateRef.Name),
+				fmt.Sprintf("Spec.VirtualHost.TLS.CertificateRefs %q namespace must match the Gateway's namespace or be covered by a ReferenceGrant", certificateRef.Name),
 			)
 			return nil
 		}
@@ -131,18 +131,18 @@ type crossNamespaceTo struct {
 	name      string
 }
 
-func validCrossNamespaceRef(policies gatewayapi_v1alpha2.ReferencePolicyList, from crossNamespaceFrom, to crossNamespaceTo) bool {
-	for _, referencePolicy := range policies.Items {
-		// The ReferencePolicy must be defined in the namespace of
+func validCrossNamespaceRef(grants gatewayapi_v1alpha2.ReferenceGrantList, from crossNamespaceFrom, to crossNamespaceTo) bool {
+	for _, grant := range grants.Items {
+		// The ReferenceGrant must be defined in the namespace of
 		// the "to" (the referent).
-		if referencePolicy.Namespace != to.namespace {
+		if grant.Namespace != to.namespace {
 			continue
 		}
 
-		// Check if the ReferencePolicy has a matching "from".
+		// Check if the ReferenceGrant has a matching "from".
 		var fromAllowed bool
-		for _, refPolicyFrom := range referencePolicy.Spec.From {
-			if string(refPolicyFrom.Namespace) == from.namespace && string(refPolicyFrom.Group) == from.group && string(refPolicyFrom.Kind) == from.kind {
+		for _, grantFrom := range grant.Spec.From {
+			if string(grantFrom.Namespace) == from.namespace && string(grantFrom.Group) == from.group && string(grantFrom.Kind) == from.kind {
 				fromAllowed = true
 				break
 			}
@@ -151,10 +151,10 @@ func validCrossNamespaceRef(policies gatewayapi_v1alpha2.ReferencePolicyList, fr
 			continue
 		}
 
-		// Check if the ReferencePolicy has a matching "to".
+		// Check if the ReferenceGrant has a matching "to".
 		var toAllowed bool
-		for _, refPolicyTo := range referencePolicy.Spec.To {
-			if string(refPolicyTo.Group) == to.group && string(refPolicyTo.Kind) == to.kind && (refPolicyTo.Name == nil || *refPolicyTo.Name == "" || string(*refPolicyTo.Name) == to.name) {
+		for _, grantTo := range grant.Spec.To {
+			if string(grantTo.Group) == to.group && string(grantTo.Kind) == to.kind && (grantTo.Name == nil || *grantTo.Name == "" || string(*grantTo.Name) == to.name) {
 				toAllowed = true
 				break
 			}

@@ -42,11 +42,12 @@ func (r *GatewayReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
+//+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways/finalizers,verbs=update
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gatewayclasses,verbs=get;list;watch
-//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=referencepolicies,verbs=get;list;watch
+//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=referencegrants,verbs=get;list;watch
 //+kubebuilder:rbac:groups=puregw.epic-gateway.org,resources=gatewayclassconfigs,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -302,8 +303,8 @@ func (r *GatewayReconciler) GetSecret(name types.NamespacedName) (*v1.Secret, er
 }
 
 // GetGrants implements the dag.Fetcher GetGrants() method.
-func (r *GatewayReconciler) GetGrants(ns string) (gatewayv1a2.ReferencePolicyList, error) {
-	classList := gatewayv1a2.ReferencePolicyList{}
+func (r *GatewayReconciler) GetGrants(ns string) (gatewayv1a2.ReferenceGrantList, error) {
+	classList := gatewayv1a2.ReferenceGrantList{}
 	return classList, r.List(context.Background(), &classList)
 }
 

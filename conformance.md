@@ -44,6 +44,6 @@ Relative to specification version v1alpha2 - https://gateway-api.sigs.k8s.io/v1a
 | TLSRoute                                                       |           |                         | No         |
 | UDPRoute                                                       |           |                         | No         |
 |                                                                |           |                         |            |
-| ReferenceGrant/ReferencePolicy                                 |           | Core                    | No         |
+| ReferenceGrant                                                 |           | Core                    | No         |
 |                                                                |           |                         |            |
 
