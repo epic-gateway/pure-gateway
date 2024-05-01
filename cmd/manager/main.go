@@ -87,6 +87,14 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Gateway")
 		os.Exit(1)
 	}
+	grantReconciler := gatewaycontrollers.ReferenceGrantReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}
+	if err = grantReconciler.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ReferenceGrant")
+		os.Exit(1)
+	}
 	if err = (&discoverycontrollers.EndpointSliceReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
