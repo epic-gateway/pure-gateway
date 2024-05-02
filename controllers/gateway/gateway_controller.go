@@ -143,6 +143,11 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			// If we have a TLS config then we need to validate it.
 			if dag.ValidGatewayTLS(gw, *listener.TLS, string(listener.Name), &gsu, r) == nil {
 				tlsOK = false
+				l.V(1).Info("TLS Error", "listener", listener.Name)
+				gsu.AddListenerCondition(string(listener.Name), gatewayv1a2.ListenerConditionResolvedRefs, metav1.ConditionFalse, gatewayv1a2.ListenerReasonInvalidCertificateRef, "TLS configuration error")
+			} else {
+				l.V(1).Info("TLS OK", "listener", listener.Name)
+				gsu.AddListenerCondition(string(listener.Name), gatewayv1a2.ListenerConditionReady, metav1.ConditionTrue, gatewayv1a2.ListenerReasonReady, "TLS OK")
 			}
 		}
 	}
