@@ -40,6 +40,7 @@ const ReasonErrorsExist RouteReasonType = "ErrorsExist"
 const ReasonGatewayAllowMismatch RouteReasonType = "GatewayAllowMismatch"
 const ReasonAllBackendRefsHaveZeroWeights RouteReasonType = "AllBackendRefsHaveZeroWeights"
 const ReasonInvalidPathMatch RouteReasonType = "InvalidPathMatch"
+const ReasonNoMatchingListenerHostname RouteReasonType = "NoMatchingListenerHostname"
 const ReasonAccepted RouteReasonType = "Accepted"
 
 // clock is used to set lastTransitionTime on status conditions.

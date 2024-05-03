@@ -124,9 +124,11 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 
 		// Make sure that the Gateway will allow this Route to attach
-		if err := gateway.GatewayAllowsRoute(gw, (*gatewayv1a2.Kind)(&route.Kind)); err != nil {
+		if err := gateway.GatewayAllowsHTTPRoute(gw, route); err != nil {
+			l.V(1).Info("Gateway rejected HTTPRoute", "gw", gw.Name)
+
 			// Update the Route's status
-			if err := markRouteRejected(ctx, r.Client, l, client.ObjectKey{Namespace: route.GetNamespace(), Name: route.GetName()}); err != nil {
+			if err := markRouteCondition(ctx, r.Client, l, client.ObjectKey{Namespace: route.GetNamespace(), Name: route.GetName()}, gatewayv1a2.RouteConditionAccepted, metav1.ConditionFalse, status.ReasonNoMatchingListenerHostname, "Reference not allowed by parent"); err != nil {
 				return controllers.Done, err
 			}
 			return controllers.Done, nil
