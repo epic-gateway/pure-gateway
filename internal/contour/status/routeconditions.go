@@ -34,7 +34,6 @@ const ReasonNotImplemented RouteReasonType = "NotImplemented"
 const ReasonPathMatchType RouteReasonType = "PathMatchType"
 const ReasonHeaderMatchType RouteReasonType = "HeaderMatchType"
 const ReasonHTTPRouteFilterType RouteReasonType = "HTTPRouteFilterType"
-const ReasonDegraded RouteReasonType = "Degraded"
 const ReasonValid RouteReasonType = "Valid"
 const ReasonErrorsExist RouteReasonType = "ErrorsExist"
 const ReasonGatewayAllowMismatch RouteReasonType = "GatewayAllowMismatch"
@@ -42,6 +41,10 @@ const ReasonAllBackendRefsHaveZeroWeights RouteReasonType = "AllBackendRefsHaveZ
 const ReasonInvalidPathMatch RouteReasonType = "InvalidPathMatch"
 const ReasonNoMatchingListenerHostname RouteReasonType = "NoMatchingListenerHostname"
 const ReasonAccepted RouteReasonType = "Accepted"
+
+const (
+	ReasonDegraded gatewayapi_v1alpha2.RouteConditionReason = "Degraded"
+)
 
 // clock is used to set lastTransitionTime on status conditions.
 var clock utilclock.Clock = utilclock.RealClock{}

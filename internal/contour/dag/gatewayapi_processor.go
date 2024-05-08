@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation"
+	"k8s.io/utils/ptr"
 	gatewayapi_v1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
@@ -282,4 +283,73 @@ func hostnameMatchesWildcardHostname(hostname, wildcardHostname string) bool {
 
 	wildcardMatch := strings.TrimSuffix(hostname, strings.TrimPrefix(wildcardHostname, "*"))
 	return len(wildcardMatch) > 0
+}
+
+// validateBackendRef verifies that the specified BackendRef is valid.
+// Returns a meta_v1.Condition for the route if any errors are detected.
+func ValidateBackendRef(backendRef gatewayapi_v1alpha2.BackendRef, routeKind, routeNamespace string, cb Fetcher) *metav1.Condition {
+	return validateBackendObjectRef(backendRef.BackendObjectReference, "Spec.Rules.BackendRef", routeKind, routeNamespace, cb)
+}
+
+// validateBackendObjectRef verifies that the specified BackendObjectReference
+// is valid. Returns a meta_v1.Condition for the route if any errors are detected.
+// As BackendObjectReference is used in multiple fields, the given field is used
+// to build the message in meta_v1.Condition.
+func validateBackendObjectRef(
+	backendObjectRef gatewayapi_v1alpha2.BackendObjectReference,
+	field string,
+	routeKind string,
+	routeNamespace string,
+	cb Fetcher,
+) *metav1.Condition {
+	if !(backendObjectRef.Group == nil || *backendObjectRef.Group == "") {
+		return ptr.To(resolvedRefsFalse(gatewayapi_v1alpha2.RouteReasonInvalidKind, fmt.Sprintf("%s.Group must be \"\"", field)))
+	}
+
+	if !(backendObjectRef.Kind != nil && *backendObjectRef.Kind == "Service") {
+		return ptr.To(resolvedRefsFalse(gatewayapi_v1alpha2.RouteReasonInvalidKind, fmt.Sprintf("%s.Kind must be 'Service'", field)))
+	}
+
+	if backendObjectRef.Name == "" {
+		return ptr.To(resolvedRefsFalse(status.ReasonDegraded, fmt.Sprintf("%s.Name must be specified", field)))
+	}
+
+	if backendObjectRef.Port == nil {
+		return ptr.To(resolvedRefsFalse(status.ReasonDegraded, fmt.Sprintf("%s.Port must be specified", field)))
+	}
+
+	// If the backend is in a different namespace than the route, then we need to
+	// check for a ReferenceGrant that allows the reference.
+	if backendObjectRef.Namespace != nil && string(*backendObjectRef.Namespace) != routeNamespace {
+		grants, err := cb.GetGrants(string(*backendObjectRef.Namespace))
+		if err != nil {
+			return nil
+		}
+		if !validCrossNamespaceRef(grants,
+			crossNamespaceFrom{
+				group:     string(gatewayapi_v1alpha2.GroupName),
+				kind:      routeKind,
+				namespace: routeNamespace,
+			},
+			crossNamespaceTo{
+				group:     "",
+				kind:      "Service",
+				namespace: string(*backendObjectRef.Namespace),
+				name:      string(backendObjectRef.Name),
+			},
+		) {
+			return ptr.To(resolvedRefsFalse(gatewayapi_v1alpha2.RouteReasonRefNotPermitted, fmt.Sprintf("%s.Namespace must match the route's namespace or be covered by a ReferenceGrant", field)))
+		}
+	}
+
+	return nil
+}
+
+func resolvedRefsFalse(reason gatewayapi_v1alpha2.RouteConditionReason, msg string) metav1.Condition {
+	return metav1.Condition{
+		Type:    string(gatewayapi_v1alpha2.RouteConditionResolvedRefs),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(reason),
+		Message: msg,
+	}
 }
