@@ -58,7 +58,7 @@ func main() {
 	setupLog.Info("Hello there!")
 
 	// Start the GUE ping utility.
-	pinger := exec.Command("/opt/acnodal/bin/gue_ping_svc_auto", "25")
+	pinger := exec.Command("/opt/acnodal/bin/gue_ping_svc_auto", "3")
 	err := pinger.Start()
 	if err != nil {
 		setupLog.Error(err, "Starting pinger")
