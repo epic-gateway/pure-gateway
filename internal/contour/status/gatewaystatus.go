@@ -26,10 +26,13 @@ import (
 
 type GatewayReasonType string
 
+const ReasonAcceptedGateway = "Accepted"
 const ReasonValidGateway = "Valid"
 const ReasonInvalidGateway = "Invalid"
 
 const MessageValidGateway = "Valid Gateway"
+
+const ConditionAcceptedGateway gatewayapi_v1alpha2.GatewayConditionType = "Accepted"
 
 // GatewayStatusUpdate represents an atomic update to a
 // Gateway's status.

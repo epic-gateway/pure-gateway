@@ -190,7 +190,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Tell the user that we're working on bringing up the Gateway.
-	gsu.AddCondition(gatewayv1a2.GatewayConditionReady, metav1.ConditionTrue, status.ReasonValidGateway, "Announced to EPIC")
+	gsu.AddCondition(status.ConditionAcceptedGateway, metav1.ConditionTrue, status.ReasonAcceptedGateway, "Announced to EPIC")
 	if err := updateStatus(ctx, r.Client, l, &gw, &gsu); err != nil {
 		return controllers.Done, err
 	}
