@@ -118,6 +118,9 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	link, announced := gw.Annotations[epicgwv1.EPICLinkAnnotation]
 	if announced {
 		l.Info("Previously announced", "link", link)
+		if err := freshenStatus(ctx, r.Client, l, client.ObjectKey{Namespace: gw.GetNamespace(), Name: gw.GetName()}); err != nil {
+			return controllers.Done, err
+		}
 		return controllers.Done, nil
 	}
 
@@ -365,6 +368,37 @@ func markAddresses(ctx context.Context, cl client.Client, l logr.Logger, gw *gat
 
 		// Try to update
 		return cl.Status().Update(ctx, gw)
+	})
+}
+
+// freshenStatus updates the Status Condition ObservedGeneration.
+func freshenStatus(ctx context.Context, cl client.Client, l logr.Logger, key client.ObjectKey) error {
+	now := metav1.NewTime(time.Now())
+
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		// Fetch the resource here; you need to refetch it on every try,
+		// since if you got a conflict on the last update attempt then
+		// you need to get the current version before making your own
+		// changes.
+		gw := gatewayv1a2.Gateway{}
+		if err := cl.Get(ctx, key, &gw); err != nil {
+			return err
+		}
+
+		// Update the Conditions' ObservedGenerations
+		for i := range gw.Status.Conditions {
+			gw.Status.Conditions[i].ObservedGeneration = gw.ObjectMeta.Generation
+			gw.Status.Conditions[i].LastTransitionTime = now
+		}
+		for i, listener := range gw.Status.Listeners {
+			for j := range listener.Conditions {
+				gw.Status.Listeners[i].Conditions[j].ObservedGeneration = gw.ObjectMeta.Generation
+				gw.Status.Listeners[i].Conditions[j].LastTransitionTime = now
+			}
+		}
+
+		// Try to update
+		return cl.Status().Update(ctx, &gw)
 	})
 }
 
