@@ -133,7 +133,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	// Set the listener supportedKinds
 	for _, listener := range gw.Spec.Listeners {
-		gsu.SetListenerSupportedKinds(string(listener.Name), epicgwv1.SupportedKinds)
+		setSupportedKinds(l, string(listener.Name), listener.AllowedRoutes.Kinds, &gsu)
 	}
 
 	// Validate TLS configuration (if present)
@@ -420,4 +420,38 @@ func isRefToGateway(ref gatewayv1a2.ParentReference, gateway types.NamespacedNam
 	}
 
 	return string(ref.Name) == gateway.Name
+}
+
+func setSupportedKinds(l logr.Logger, name string, rgks []gatewayv1a2.RouteGroupKind, gsu *status.GatewayStatusUpdate) {
+	var (
+		anyUnsupported bool = false
+		kinds          []gatewayv1a2.Kind
+	)
+
+	if len(rgks) == 0 { // No Kinds were specified - set a default
+		gsu.SetListenerSupportedKinds(name, epicgwv1.SupportedKinds)
+		return
+	}
+
+	// Check the user-specified Kinds to ensure that we support them
+	for _, kind := range rgks {
+		if epicgwv1.SupportedKind(kind.Kind) {
+			kinds = append(kinds, kind.Kind)
+		} else {
+			anyUnsupported = true
+		}
+	}
+
+	if len(kinds) == 0 { // Hard error: none of the specified Kinds were supported
+		l.V(1).Info("Config Error", "error", "No Valid Route Kind", "listener", name)
+		gsu.AddListenerCondition(name, gatewayv1a2.ListenerConditionResolvedRefs, metav1.ConditionFalse, gatewayv1a2.ListenerReasonInvalidRouteKinds, "Listener configuration error")
+		return
+	}
+
+	if anyUnsupported { // The user specified at least one unsupported Kind
+		gsu.AddListenerCondition(name, gatewayv1a2.ListenerConditionResolvedRefs, metav1.ConditionFalse, gatewayv1a2.ListenerReasonInvalidRouteKinds, "Listener configuration error")
+	}
+
+	gsu.SetListenerSupportedKinds(name, kinds)
+	return
 }
