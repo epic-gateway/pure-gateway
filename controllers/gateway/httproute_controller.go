@@ -648,6 +648,12 @@ func markRouteAccepted(ctx context.Context, cl client.Client, l logr.Logger, rou
 			Status:  metav1.ConditionTrue,
 			Message: "Announced to EPIC",
 		},
+		gatewayv1a2.RouteConditionResolvedRefs: {
+			Type:    string(gatewayv1a2.RouteConditionResolvedRefs),
+			Reason:  string(gatewayv1a2.RouteReasonResolvedRefs),
+			Status:  metav1.ConditionTrue,
+			Message: "References resolved",
+		},
 	}
 	return markRouteConditions(ctx, cl, l, routeKey, conditions)
 }
@@ -661,6 +667,12 @@ func markRouteRejected(ctx context.Context, cl client.Client, l logr.Logger, rou
 			Reason:  string(status.ReasonGatewayAllowMismatch),
 			Status:  metav1.ConditionFalse,
 			Message: "Reference not allowed by parent",
+		},
+		gatewayv1a2.RouteConditionResolvedRefs: {
+			Type:    string(gatewayv1a2.RouteConditionResolvedRefs),
+			Reason:  string(gatewayv1a2.RouteReasonResolvedRefs),
+			Status:  metav1.ConditionFalse,
+			Message: "References not allowed by parent",
 		},
 	}
 
