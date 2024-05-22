@@ -147,10 +147,11 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			if dag.ValidGatewayTLS(gw, *listener.TLS, string(listener.Name), &gsu, r) == nil {
 				tlsOK = false
 				l.V(1).Info("TLS Error", "listener", listener.Name)
-				gsu.AddListenerCondition(string(listener.Name), gatewayv1a2.ListenerConditionResolvedRefs, metav1.ConditionFalse, gatewayv1a2.ListenerReasonInvalidCertificateRef, "TLS configuration error")
 			} else {
 				l.V(1).Info("TLS OK", "listener", listener.Name)
 				gsu.AddListenerCondition(string(listener.Name), gatewayv1a2.ListenerConditionReady, metav1.ConditionTrue, gatewayv1a2.ListenerReasonReady, "TLS OK")
+				gsu.AddListenerCondition(string(listener.Name), gatewayv1a2.ListenerConditionType("Accepted"), metav1.ConditionTrue, gatewayv1a2.ListenerReasonReady, "TLS OK")
+				gsu.AddListenerCondition(string(listener.Name), gatewayv1a2.ListenerConditionType("Programmed"), metav1.ConditionTrue, gatewayv1a2.ListenerConditionReason("Programmed"), "TLS OK")
 			}
 		}
 	}
@@ -159,7 +160,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// gateway and don't announce.
 	if !tlsOK {
 		gsu.AddCondition(gatewayv1a2.GatewayConditionScheduled, metav1.ConditionFalse, status.ReasonValidGateway, "Invalid GatewayTLS")
-		gsu.AddCondition(gatewayv1a2.GatewayConditionReady, metav1.ConditionTrue, status.ReasonValidGateway, "Not announced to EPIC")
+		gsu.AddCondition(status.ConditionAcceptedGateway, metav1.ConditionTrue, status.ReasonValidGateway, "Not announced to EPIC")
 		if err := updateStatus(ctx, r.Client, l, &gw, &gsu); err != nil {
 			return controllers.Done, err
 		}
@@ -194,6 +195,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	// Tell the user that we're working on bringing up the Gateway.
 	gsu.AddCondition(status.ConditionAcceptedGateway, metav1.ConditionTrue, status.ReasonAcceptedGateway, "Announced to EPIC")
+	gsu.AddCondition(status.ConditionProgrammedGateway, metav1.ConditionTrue, status.ReasonAcceptedGateway, "Programmed")
 	if err := updateStatus(ctx, r.Client, l, &gw, &gsu); err != nil {
 		return controllers.Done, err
 	}

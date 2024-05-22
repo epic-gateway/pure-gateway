@@ -95,7 +95,7 @@ func ValidGatewayTLS(gateway gatewayapi_v1alpha2.Gateway, listenerTLS gatewayapi
 				listenerName,
 				gatewayapi_v1alpha2.ListenerConditionResolvedRefs,
 				metav1.ConditionFalse,
-				gatewayapi_v1alpha2.ListenerReasonInvalidCertificateRef,
+				gatewayapi_v1alpha2.ListenerReasonRefNotPermitted,
 				fmt.Sprintf("Spec.VirtualHost.TLS.CertificateRefs %q namespace must match the Gateway's namespace or be covered by a ReferenceGrant", certificateRef.Name),
 			)
 			return nil

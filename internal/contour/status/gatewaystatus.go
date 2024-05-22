@@ -33,6 +33,7 @@ const ReasonInvalidGateway = "Invalid"
 const MessageValidGateway = "Valid Gateway"
 
 const ConditionAcceptedGateway gatewayapi_v1alpha2.GatewayConditionType = "Accepted"
+const ConditionProgrammedGateway gatewayapi_v1alpha2.GatewayConditionType = "Programmed"
 
 // GatewayStatusUpdate represents an atomic update to a
 // Gateway's status.
