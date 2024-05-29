@@ -8,7 +8,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // MockEPIC is a mock of EPIC interface
@@ -65,7 +65,7 @@ func (mr *MockEPICMockRecorder) GetGroup() *gomock.Call {
 }
 
 // AnnounceService mocks base method
-func (m *MockEPIC) AnnounceGateway(url string, gw gatewayv1a2.Gateway) (GatewayResponse, error) {
+func (m *MockEPIC) AnnounceGateway(url string, gw gatewayapi.Gateway) (GatewayResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AnnounceGateway", url, gw)
 	ret0, _ := ret[0].(GatewayResponse)

@@ -16,7 +16,7 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	v1 "k8s.io/api/core/v1"
-	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 
 	"epic-gateway.org/puregw/internal/gateway"
 )
@@ -30,7 +30,7 @@ const (
 type EPIC interface {
 	GetAccount() (AccountResponse, error)
 	GetGroup() (GroupResponse, error)
-	AnnounceGateway(url string, gateway gatewayv1a2.Gateway) (GatewayResponse, error)
+	AnnounceGateway(url string, gateway gatewayapi.Gateway) (GatewayResponse, error)
 	FetchGateway(url string) (GatewayResponse, error)
 	Delete(svcUrl string) error
 	FetchSlice(url string) (*SliceResponse, error)
@@ -115,7 +115,7 @@ type GatewaySpec struct {
 
 	// Gateway is the client-side gatewayv1a2.GatewaySpec that
 	// corresponds to this GWP.
-	Gateway gatewayv1a2.GatewaySpec `json:"gateway,omitempty"`
+	Gateway gatewayapi.GatewaySpec `json:"gateway,omitempty"`
 }
 
 // EndpointMap contains a map of the EPIC endpoints that connect
@@ -244,7 +244,7 @@ func (n *epic) GetGroup() (GroupResponse, error) {
 // creation URL which is a child of the service group to which this
 // service will belong. name is the service name.  address is a string
 // containing an IP address. ports is a slice of v1.ServicePorts.
-func (n *epic) AnnounceGateway(url string, gw gatewayv1a2.Gateway) (GatewayResponse, error) {
+func (n *epic) AnnounceGateway(url string, gw gatewayapi.Gateway) (GatewayResponse, error) {
 	ports, err := ListenersToPorts(gw.Spec.Listeners)
 	if err != nil {
 		return GatewayResponse{}, err
@@ -323,7 +323,7 @@ func (n *epic) Delete(url string) error {
 }
 
 // If error is non-nil then one of the input protocols wasn't valid.
-func ListenersToPorts(listeners []gatewayv1a2.Listener) ([]v1.ServicePort, error) {
+func ListenersToPorts(listeners []gatewayapi.Listener) ([]v1.ServicePort, error) {
 	cPorts := make([]v1.ServicePort, len(listeners))
 
 	// Expose the configured ports
@@ -344,7 +344,7 @@ func ListenersToPorts(listeners []gatewayv1a2.Listener) ([]v1.ServicePort, error
 
 // washProtocol "washes" proto, optionally upcasing if necessary. If
 // error is non-nil then the input protocol wasn't valid.
-func washProtocol(proto gatewayv1a2.ProtocolType) (v1.Protocol, error) {
+func washProtocol(proto gatewayapi.ProtocolType) (v1.Protocol, error) {
 	upper := strings.ToUpper(string(proto))
 	if upper == "HTTP" || upper == "HTTPS" || upper == "TLS" {
 		upper = "TCP"

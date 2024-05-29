@@ -17,7 +17,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayapi_v1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	epicgwv1 "epic-gateway.org/puregw/apis/puregw/v1"
 	"epic-gateway.org/puregw/controllers"
@@ -34,7 +35,7 @@ type TCPRouteReconciler struct {
 // SetupWithManager sets up the controller with the Manager.
 func (r *TCPRouteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&gatewayv1a2.TCPRoute{}).
+		For(&gatewayapi_v1alpha2.TCPRoute{}).
 		Complete(r)
 }
 
@@ -63,7 +64,7 @@ func (r *TCPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	)
 
 	// Get the TCPRoute that triggered this request
-	route := gatewayv1a2.TCPRoute{}
+	route := gatewayapi_v1alpha2.TCPRoute{}
 	if err := r.Get(ctx, req.NamespacedName, &route); err != nil {
 		l.Info("Can't get TCPRoute, probably deleted", "name", req.NamespacedName)
 
@@ -100,7 +101,7 @@ func (r *TCPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	// won't handle this route.
 	var config *epicgwv1.GatewayClassConfig
 	for _, parent := range route.Spec.ParentRefs {
-		gw := gatewayv1a2.Gateway{}
+		gw := gatewayapi.Gateway{}
 		if err := parentGW(ctx, r.Client, route.Namespace, parent, &gw); err != nil {
 			l.Info("Can't get parent, will retry", "parentRef", parent)
 			return controllers.TryAgain, nil
@@ -151,12 +152,12 @@ func (r *TCPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	// Munge the ParentRefs so they refer to the Gateways' UIDs, not
 	// their names. We use UIDs on the EPIC side because they're unique.
 	for i, parent := range announcedRoute.Spec.ParentRefs {
-		gw := gatewayv1a2.Gateway{}
+		gw := gatewayapi.Gateway{}
 		if err := parentGW(ctx, r.Client, route.Namespace, parent, &gw); err != nil {
 			l.Info("Parent not found", "parentRef", parent)
 			missingParent = true
 		} else {
-			announcedRoute.Spec.ParentRefs[i].Name = gatewayv1a2.ObjectName(gateway.GatewayEPICUID(gw))
+			announcedRoute.Spec.ParentRefs[i].Name = gatewayapi.ObjectName(gateway.GatewayEPICUID(gw))
 		}
 	}
 
@@ -170,7 +171,7 @@ func (r *TCPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 				l.Info("Backend not found", "backendRef", ref)
 				missingService = true
 			} else {
-				announcedRoute.Spec.Rules[i].BackendRefs[j].Name = gatewayv1a2.ObjectName(svc.UID)
+				announcedRoute.Spec.Rules[i].BackendRefs[j].Name = gatewayapi.ObjectName(svc.UID)
 			}
 		}
 	}
@@ -277,7 +278,7 @@ func (r *TCPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 // Cleanup removes our finalizer from all of the TCPRoutes in the
 // system.
 func (r *TCPRouteReconciler) Cleanup(l logr.Logger, ctx context.Context) error {
-	routeList := gatewayv1a2.TCPRouteList{}
+	routeList := gatewayapi_v1alpha2.TCPRouteList{}
 	if err := r.Client.List(ctx, &routeList); err != nil {
 		return err
 	}
@@ -292,7 +293,7 @@ func (r *TCPRouteReconciler) Cleanup(l logr.Logger, ctx context.Context) error {
 // announceSlices announces the slices that this TCPRoute
 // references.If the error return value is non-nil them something has
 // gone wrong.
-func announceSlicesTCP(ctx context.Context, cl client.Client, l logr.Logger, sliceURL string, epic acnodal.EPIC, configName string, route *gatewayv1a2.TCPRoute) error {
+func announceSlicesTCP(ctx context.Context, cl client.Client, l logr.Logger, sliceURL string, epic acnodal.EPIC, configName string, route *gatewayapi_v1alpha2.TCPRoute) error {
 	// Get the set of EndpointSlices that this Route references.
 	slices, incomplete, err := routeSlicesTCP(ctx, cl, route)
 	if err != nil {
@@ -374,7 +375,7 @@ func announceSlicesTCP(ctx context.Context, cl client.Client, l logr.Logger, sli
 // something is missing so the controller needs to back off and retry
 // later. If err is non-nil then the array of EndpointSlices is
 // invalid.
-func routeSlicesTCP(ctx context.Context, cl client.Client, route *gatewayv1a2.TCPRoute) (slices []*discoveryv1.EndpointSlice, incomplete bool, err error) {
+func routeSlicesTCP(ctx context.Context, cl client.Client, route *gatewayapi_v1alpha2.TCPRoute) (slices []*discoveryv1.EndpointSlice, incomplete bool, err error) {
 	// Assume that we can reach all of our services.
 	incomplete = false
 

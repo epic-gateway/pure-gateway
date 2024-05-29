@@ -15,19 +15,20 @@ import (
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/pointer"
-	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayapi_v1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	epicgwv1 "epic-gateway.org/puregw/apis/puregw/v1"
 )
 
 var (
-	Listener80     = gatewayv1a2.Listener{Name: "listener80", Port: 80, Protocol: gatewayv1a2.HTTPProtocolType}
+	Listener80     = gatewayapi.Listener{Name: "listener80", Port: 80, Protocol: gatewayapi.HTTPProtocolType}
 	EndpointPort80 = v1.EndpointPort{Port: 80}
 	EndpointPort81 = v1.EndpointPort{Port: 81}
 )
 
 const (
-	TestHarnessEPIC = "acndev-ctl"
+	TestHarnessEPIC = "gwdev-ctl"
 	UserNS          = "root"
 	GroupName       = "gatewayhttp"
 	ServiceAccount  = "user1"
@@ -88,15 +89,15 @@ func TestGatewayAnnouncements(t *testing.T) {
 	e := MustEPIC(t)
 	g := GetGroup(t, e, GroupURL)
 
-	gw := gatewayv1a2.Gateway{
+	gw := gatewayapi.Gateway{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "test-ns",
 			Name:      "test-name",
 			UID:       "a044f348-f80c-4ac0-b911-6ed45e37994a",
 		},
-		Spec: gatewayv1a2.GatewaySpec{
-			Listeners: []gatewayv1a2.Listener{Listener80},
-			Addresses: []gatewayv1a2.GatewayAddress{},
+		Spec: gatewayapi.GatewaySpec{
+			Listeners: []gatewayapi.Listener{Listener80},
+			Addresses: []gatewayapi.GatewayAddress{},
 		},
 	}
 
@@ -172,7 +173,7 @@ func TestRouteAnnouncements(t *testing.T) {
 			Name:      GroupName,
 			UID:       "a044f348-f80c-4ac0-b911-6ed45e37994a",
 		},
-		HTTP: &gatewayv1a2.HTTPRouteSpec{Hostnames: []gatewayv1a2.Hostname{"test-host", "other-host"}},
+		HTTP: &gatewayapi.HTTPRouteSpec{Hostnames: []gatewayapi.Hostname{"test-host", "other-host"}},
 	}
 	rt, err := e.AnnounceRoute(a.Links["create-route"], route)
 	if err != nil {
@@ -185,9 +186,9 @@ func TestRouteAnnouncements(t *testing.T) {
 	}
 
 	// TCP Route
-	route.TCP = &gatewayv1a2.TCPRouteSpec{
-		CommonRouteSpec: gatewayv1a2.CommonRouteSpec{},
-		Rules:           []gatewayv1a2.TCPRouteRule{},
+	route.TCP = &gatewayapi_v1alpha2.TCPRouteSpec{
+		CommonRouteSpec: gatewayapi.CommonRouteSpec{},
+		Rules:           []gatewayapi_v1alpha2.TCPRouteRule{},
 	}
 	route.HTTP = nil
 

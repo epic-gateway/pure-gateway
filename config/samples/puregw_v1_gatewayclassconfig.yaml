@@ -6,7 +6,7 @@ metadata:
 spec:
   epic:
     cluster-name: epic-sample
-    gateway-hostname: acndev-ctl
+    gateway-hostname: gwdev-ctl
     service-account: user1
     service-key: password1
     user-namespace: root

@@ -3,11 +3,11 @@ package controllers
 import (
 	"os"
 
-	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 const (
-	GatewayController = gatewayv1a2.GatewayController("epic-gateway.org/puregw")
+	GatewayController = gatewayapi.GatewayController("epic-gateway.org/puregw")
 
 	agentFinalizerPrefix = "puregw.epic-gateway.org/agent_"
 	FinalizerName        = "puregw.epic-gateway.org/manager"

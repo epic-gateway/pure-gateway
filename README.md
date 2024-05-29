@@ -1,7 +1,7 @@
 PureGW
 ======
 
-Client implementation of the Kubernetes Gateway-SIG Gateway v1alpha2
+Client implementation of the Kubernetes Gateway-SIG Gateway v1
 API that works with the EPIC Gateway server.
 
 https://gateway-api.sigs.k8s.io/
@@ -13,7 +13,7 @@ Before installing PureGW you need to install the k8s Gateway-SIG
 custom resource definitions manually. Eventually they'll be bundled
 into k8s but they aren't yet.
 
-https://gateway-api.sigs.k8s.io/v1alpha2/guides/getting-started/#installing-gateway-api-crds-manually
+https://gateway-api.sigs.k8s.io/guides/#install-experimental-channel
 
 We haven't implemented Helm charts yet so installation uses
 old-fashioned yaml manifests. To install PureGW, apply

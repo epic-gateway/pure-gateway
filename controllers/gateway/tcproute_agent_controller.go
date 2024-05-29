@@ -17,7 +17,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayapi_v1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"epic-gateway.org/puregw/controllers"
 	"epic-gateway.org/puregw/internal/trueingress"
@@ -32,7 +33,7 @@ type TCPRouteAgentReconciler struct {
 // SetupWithManager sets up the controller with the Manager.
 func (r *TCPRouteAgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&gatewayv1a2.TCPRoute{}).
+		For(&gatewayapi_v1alpha2.TCPRoute{}).
 		Complete(r)
 }
 
@@ -59,7 +60,7 @@ func (r *TCPRouteAgentReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	l := log.FromContext(ctx)
 
 	// Get the Resource that triggered this request
-	route := gatewayv1a2.TCPRoute{}
+	route := gatewayapi_v1alpha2.TCPRoute{}
 	if err := r.Get(ctx, req.NamespacedName, &route); err != nil {
 		// Ignore not-found errors, since they can't be fixed by an
 		// immediate requeue (we'll need to wait for a new notification),
@@ -78,7 +79,7 @@ func (r *TCPRouteAgentReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	// Try to get the Gateway to which we refer, and keep trying until
 	// we can.
-	gw := gatewayv1a2.Gateway{}
+	gw := gatewayapi.Gateway{}
 	// FIXME: need to handle multiple parents
 	if err := parentGW(ctx, r.Client, route.Namespace, route.Spec.ParentRefs[0], &gw); err != nil {
 		l.Info("Can't get parent, will retry", "parentRef", route.Spec.ParentRefs[0])
@@ -150,7 +151,7 @@ func (r *TCPRouteAgentReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 // Cleanup removes our finalizer from all of the TCPRoutes in the
 // system.
 func (r *TCPRouteAgentReconciler) Cleanup(l logr.Logger, ctx context.Context) error {
-	routeList := gatewayv1a2.TCPRouteList{}
+	routeList := gatewayapi_v1alpha2.TCPRouteList{}
 	if err := r.Client.List(ctx, &routeList); err != nil {
 		return err
 	}

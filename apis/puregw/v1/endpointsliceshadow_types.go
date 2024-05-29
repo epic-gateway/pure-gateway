@@ -6,7 +6,7 @@ package v1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // EndpointSliceShadowSpec defines the desired state of EndpointSliceShadow
@@ -20,7 +20,7 @@ type EndpointSliceShadowSpec struct {
 
 	// ParentRoutes provides an efficient way to link back to the
 	// HTTPRoutes that reference this slice.
-	ParentRoutes []gatewayv1a2.ParentReference `json:"parentRoutes"`
+	ParentRoutes []gatewayapi.ParentReference `json:"parentRoutes"`
 }
 
 // EndpointSliceShadowStatus defines the observed state of EndpointSliceShadow
