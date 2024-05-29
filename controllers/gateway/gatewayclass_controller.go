@@ -14,7 +14,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 
 	"epic-gateway.org/puregw/controllers"
 	"epic-gateway.org/puregw/internal/contour/status"
@@ -22,20 +22,20 @@ import (
 
 var (
 	accepted metav1.Condition = metav1.Condition{
-		Type:    string(gatewayv1a2.GatewayClassConditionStatusAccepted),
+		Type:    string(gatewayapi.GatewayClassConditionStatusAccepted),
 		Status:  metav1.ConditionTrue,
 		Reason:  "Valid",
 		Message: "EPIC connection succeeded",
 	}
 
 	gwccInvalid metav1.Condition = metav1.Condition{
-		Type:   string(gatewayv1a2.GatewayClassConditionStatusAccepted),
+		Type:   string(gatewayapi.GatewayClassConditionStatusAccepted),
 		Status: metav1.ConditionFalse,
-		Reason: string(gatewayv1a2.GatewayClassReasonInvalidParameters),
+		Reason: string(gatewayapi.GatewayClassReasonInvalidParameters),
 	}
 
 	gwccCantConnect metav1.Condition = metav1.Condition{
-		Type:    string(gatewayv1a2.GatewayClassConditionStatusAccepted),
+		Type:    string(gatewayapi.GatewayClassConditionStatusAccepted),
 		Status:  metav1.ConditionFalse,
 		Reason:  "Invalid",
 		Message: "Invalid GatewayClassConfig: unable to connect to EPIC: ",
@@ -51,7 +51,7 @@ type GatewayClassReconciler struct {
 // SetupWithManager sets up the controller with the Manager.
 func (r *GatewayClassReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&gatewayv1a2.GatewayClass{}).
+		For(&gatewayapi.GatewayClass{}).
 		Complete(r)
 }
 
@@ -75,7 +75,7 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	l := log.FromContext(ctx)
 
 	// Get the class that caused this request
-	gc := gatewayv1a2.GatewayClass{}
+	gc := gatewayapi.GatewayClass{}
 	if err := r.Get(ctx, req.NamespacedName, &gc); err != nil {
 		// ignore not-found errors, since they can't be fixed by an
 		// immediate requeue (we'll need to wait for a new notification),
@@ -119,7 +119,7 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 // markAcceptance adds a Status Condition to indicate whether we
 // accept or reject this GatewayClass.
-func markAcceptance(ctx context.Context, cl client.Client, l logr.Logger, gc *gatewayv1a2.GatewayClass, accepted metav1.Condition) error {
+func markAcceptance(ctx context.Context, cl client.Client, l logr.Logger, gc *gatewayapi.GatewayClass, accepted metav1.Condition) error {
 	key := client.ObjectKey{Namespace: gc.GetNamespace(), Name: gc.GetName()}
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {

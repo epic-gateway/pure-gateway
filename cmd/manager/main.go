@@ -19,8 +19,11 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayapi_v1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapi_v1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	epicgwv1 "epic-gateway.org/puregw/apis/puregw/v1"
 	discoverycontrollers "epic-gateway.org/puregw/controllers/discovery"
@@ -36,7 +39,9 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(gatewayv1a2.AddToScheme(scheme))
+	utilruntime.Must(gatewayapi.Install(scheme))
+	utilruntime.Must(gatewayapi_v1alpha2.Install(scheme))
+	utilruntime.Must(gatewayapi_v1beta1.Install(scheme))
 	utilruntime.Must(epicgwv1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
@@ -61,8 +66,7 @@ func main() {
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
-		Port:                   9443,
+		Metrics:                metricsserver.Options{BindAddress: metricsAddr},
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "3ea9bd30.epic-gateway.org",

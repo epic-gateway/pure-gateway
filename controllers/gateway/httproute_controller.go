@@ -22,7 +22,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayapi_v1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	epicgwv1 "epic-gateway.org/puregw/apis/puregw/v1"
 	"epic-gateway.org/puregw/controllers"
@@ -41,7 +42,7 @@ type HTTPRouteReconciler struct {
 // SetupWithManager sets up the controller with the Manager.
 func (r *HTTPRouteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&gatewayv1a2.HTTPRoute{}).
+		For(&gatewayapi.HTTPRoute{}).
 		Complete(r)
 }
 
@@ -65,13 +66,13 @@ func (r *HTTPRouteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := log.FromContext(ctx)
 	var (
-		missingService bool                                                = false
-		missingParent  bool                                                = false
-		conditions     map[gatewayv1a2.RouteConditionType]metav1.Condition = map[gatewayv1a2.RouteConditionType]metav1.Condition{}
+		missingService bool                                               = false
+		missingParent  bool                                               = false
+		conditions     map[gatewayapi.RouteConditionType]metav1.Condition = map[gatewayapi.RouteConditionType]metav1.Condition{}
 	)
 
 	// Get the HTTPRoute that triggered this request
-	route := gatewayv1a2.HTTPRoute{}
+	route := gatewayapi.HTTPRoute{}
 	if err := r.Get(ctx, req.NamespacedName, &route); err != nil {
 		l.Info("Can't get HTTPRoute, probably deleted", "name", req.NamespacedName)
 
@@ -108,7 +109,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// won't handle this route.
 	var config *epicgwv1.GatewayClassConfig
 	for _, parent := range route.Spec.ParentRefs {
-		gw := gatewayv1a2.Gateway{}
+		gw := gatewayapi.Gateway{}
 		if err := parentGW(ctx, r.Client, route.Namespace, parent, &gw); err != nil {
 			l.Info("Can't get parent, will retry", "parentRef", parent)
 			return controllers.TryAgain, nil
@@ -130,9 +131,9 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			l.V(1).Info("Gateway rejected HTTPRoute", "gw", gw.Name)
 
 			// Update the Route's status
-			var notAllowed = map[gatewayv1a2.RouteConditionType]metav1.Condition{
-				gatewayv1a2.RouteConditionAccepted: {
-					Type:    string(gatewayv1a2.RouteConditionAccepted),
+			var notAllowed = map[gatewayapi.RouteConditionType]metav1.Condition{
+				gatewayapi.RouteConditionAccepted: {
+					Type:    string(gatewayapi.RouteConditionAccepted),
 					Reason:  string(status.ReasonNoMatchingListenerHostname),
 					Status:  metav1.ConditionFalse,
 					Message: "Reference not allowed by parent",
@@ -166,12 +167,12 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// Munge the ParentRefs so they refer to the Gateways' UIDs, not
 	// their names. We use UIDs on the EPIC side because they're unique.
 	for i, parent := range announcedRoute.Spec.ParentRefs {
-		gw := gatewayv1a2.Gateway{}
+		gw := gatewayapi.Gateway{}
 		if err := parentGW(ctx, r.Client, route.Namespace, parent, &gw); err != nil {
 			l.Info("Parent not found", "parentRef", parent)
 			missingParent = true
 		} else {
-			announcedRoute.Spec.ParentRefs[i].Name = gatewayv1a2.ObjectName(gateway.GatewayEPICUID(gw))
+			announcedRoute.Spec.ParentRefs[i].Name = gatewayapi.ObjectName(gateway.GatewayEPICUID(gw))
 		}
 	}
 
@@ -181,11 +182,11 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	for i, rule := range announcedRoute.Spec.Rules {
 		for j, ref := range rule.BackendRefs {
 			switch *ref.Kind {
-			case gatewayv1a2.Kind("Service"):
+			case gatewayapi.Kind("Service"):
 				// Validate the backend ref
 				condition := dag.ValidateBackendRef(ref.BackendRef, route.Kind, route.Namespace, r)
 				if condition != nil {
-					conditions[gatewayv1a2.RouteConditionType(condition.Type)] = *condition
+					conditions[gatewayapi.RouteConditionType(condition.Type)] = *condition
 					missingService = true
 					break
 				}
@@ -194,9 +195,9 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				// which it refers.
 				svc := corev1.Service{}
 				if err := r.Get(ctx, namespacedNameOfHTTPBackendRef(ref.BackendRef, route.Namespace), &svc); err != nil {
-					conditions[gatewayv1a2.RouteConditionResolvedRefs] = metav1.Condition{
-						Type:    string(gatewayv1a2.RouteConditionResolvedRefs),
-						Reason:  string(gatewayv1a2.RouteReasonBackendNotFound),
+					conditions[gatewayapi.RouteConditionResolvedRefs] = metav1.Condition{
+						Type:    string(gatewayapi.RouteConditionResolvedRefs),
+						Reason:  string(gatewayapi.RouteReasonBackendNotFound),
 						Status:  metav1.ConditionFalse,
 						Message: fmt.Sprintf("Missing Service: %+v", ref.BackendRef),
 					}
@@ -204,12 +205,12 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 					l.Info("Backend not found", "backendRef", ref)
 					missingService = true
 				} else {
-					announcedRoute.Spec.Rules[i].BackendRefs[j].Name = gatewayv1a2.ObjectName(svc.UID)
+					announcedRoute.Spec.Rules[i].BackendRefs[j].Name = gatewayapi.ObjectName(svc.UID)
 				}
 			default:
-				conditions[gatewayv1a2.RouteConditionResolvedRefs] = metav1.Condition{
-					Type:    string(gatewayv1a2.RouteConditionResolvedRefs),
-					Reason:  string(gatewayv1a2.RouteReasonInvalidKind),
+				conditions[gatewayapi.RouteConditionResolvedRefs] = metav1.Condition{
+					Type:    string(gatewayapi.RouteConditionResolvedRefs),
+					Reason:  string(gatewayapi.RouteReasonInvalidKind),
 					Status:  metav1.ConditionFalse,
 					Message: fmt.Sprintf("BackendRef %v has unsupported kind: %s", ref.Name, *ref.Kind),
 				}
@@ -271,9 +272,9 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	} else {
 		if missingService {
-			conditions[gatewayv1a2.RouteConditionAccepted] = metav1.Condition{
-				Type:    string(gatewayv1a2.RouteConditionAccepted),
-				Reason:  string(gatewayv1a2.RouteReasonAccepted),
+			conditions[gatewayapi.RouteConditionAccepted] = metav1.Condition{
+				Type:    string(gatewayapi.RouteConditionAccepted),
+				Reason:  string(gatewayapi.RouteReasonAccepted),
 				Status:  metav1.ConditionTrue,
 				Message: "Accepted",
 			}
@@ -335,7 +336,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 // Cleanup removes our finalizer from all of the HTTPRoutes in the
 // system.
 func (r *HTTPRouteReconciler) Cleanup(l logr.Logger, ctx context.Context) error {
-	routeList := gatewayv1a2.HTTPRouteList{}
+	routeList := gatewayapi.HTTPRouteList{}
 	if err := r.Client.List(ctx, &routeList); err != nil {
 		return err
 	}
@@ -355,15 +356,15 @@ func (r *HTTPRouteReconciler) GetSecret(name types.NamespacedName) (*corev1.Secr
 }
 
 // GetGrants implements the dag.Fetcher GetGrants() method.
-func (r *HTTPRouteReconciler) GetGrants(ns string) (gatewayv1a2.ReferenceGrantList, error) {
-	classList := gatewayv1a2.ReferenceGrantList{}
+func (r *HTTPRouteReconciler) GetGrants(ns string) (gatewayapi_v1beta1.ReferenceGrantList, error) {
+	classList := gatewayapi_v1beta1.ReferenceGrantList{}
 	return classList, r.List(context.Background(), &classList)
 }
 
 // announceSlices announces the slices that this HTTPRoute
 // references.If the error return value is non-nil them something has
 // gone wrong.
-func announceSlices(ctx context.Context, cl client.Client, l logr.Logger, sliceURL string, epic acnodal.EPIC, configName string, route *gatewayv1a2.HTTPRoute) error {
+func announceSlices(ctx context.Context, cl client.Client, l logr.Logger, sliceURL string, epic acnodal.EPIC, configName string, route *gatewayapi.HTTPRoute) error {
 	// Get the set of EndpointSlices that this Route references.
 	slices, incomplete, err := routeSlices(ctx, cl, route)
 	if err != nil {
@@ -444,7 +445,7 @@ func announceSlices(ctx context.Context, cl client.Client, l logr.Logger, sliceU
 // provided ParentRef. defaultNS is the namespace of the object that
 // contains the ref, which means that it's the default namespace if
 // the ref doesn't have one.
-func parentGW(ctx context.Context, cl client.Client, defaultNS string, ref gatewayv1a2.ParentReference, gw *gatewayv1a2.Gateway) error {
+func parentGW(ctx context.Context, cl client.Client, defaultNS string, ref gatewayapi.ParentReference, gw *gatewayapi.Gateway) error {
 	gwName := namespacedNameOfParentRef(ref, defaultNS)
 	return cl.Get(ctx, gwName, gw)
 }
@@ -454,7 +455,7 @@ func parentGW(ctx context.Context, cl client.Client, defaultNS string, ref gatew
 // something is missing so the controller needs to back off and retry
 // later. If err is non-nil then the array of EndpointSlices is
 // invalid.
-func routeSlices(ctx context.Context, cl client.Client, route *gatewayv1a2.HTTPRoute) (slices []*discoveryv1.EndpointSlice, incomplete bool, err error) {
+func routeSlices(ctx context.Context, cl client.Client, route *gatewayapi.HTTPRoute) (slices []*discoveryv1.EndpointSlice, incomplete bool, err error) {
 	// Assume that we can reach all of our services.
 	incomplete = false
 
@@ -584,9 +585,9 @@ func removeEpicLink(ctx context.Context, cl client.Client, route client.Object) 
 // addSliceEpicLink adds our annotations that indicate that the slice
 // has been announced.
 func addSliceEpicLink(ctx context.Context, cl client.Client, slice *discoveryv1.EndpointSlice, link string, configName string, route client.Object) error {
-	kind := gatewayv1a2.Kind("HTTPRoute")
-	ns := gatewayv1a2.Namespace(route.GetNamespace())
-	name := gatewayv1a2.ObjectName(route.GetName())
+	kind := gatewayapi.Kind("HTTPRoute")
+	ns := gatewayapi.Namespace(route.GetNamespace())
+	name := gatewayapi.ObjectName(route.GetName())
 
 	shadow := epicgwv1.EndpointSliceShadow{
 		ObjectMeta: metav1.ObjectMeta{
@@ -596,7 +597,7 @@ func addSliceEpicLink(ctx context.Context, cl client.Client, slice *discoveryv1.
 		Spec: epicgwv1.EndpointSliceShadowSpec{
 			EPICConfigName: configName,
 			EPICLink:       link,
-			ParentRoutes: []gatewayv1a2.ParentReference{{
+			ParentRoutes: []gatewayapi.ParentReference{{
 				Kind:      &kind,
 				Namespace: &ns,
 				Name:      name,
@@ -641,16 +642,16 @@ func maybeDelete(ctx context.Context, cl client.Client, route client.Object) err
 // markRouteAccepted adds a Status Condition to indicate that the
 // route has been accepted by its parent.
 func markRouteAccepted(ctx context.Context, cl client.Client, l logr.Logger, routeKey client.ObjectKey) error {
-	conditions := map[gatewayv1a2.RouteConditionType]metav1.Condition{
-		gatewayv1a2.RouteConditionAccepted: {
-			Type:    string(gatewayv1a2.RouteConditionAccepted),
-			Reason:  string(gatewayv1a2.RouteReasonAccepted),
+	conditions := map[gatewayapi.RouteConditionType]metav1.Condition{
+		gatewayapi.RouteConditionAccepted: {
+			Type:    string(gatewayapi.RouteConditionAccepted),
+			Reason:  string(gatewayapi.RouteReasonAccepted),
 			Status:  metav1.ConditionTrue,
 			Message: "Announced to EPIC",
 		},
-		gatewayv1a2.RouteConditionResolvedRefs: {
-			Type:    string(gatewayv1a2.RouteConditionResolvedRefs),
-			Reason:  string(gatewayv1a2.RouteReasonResolvedRefs),
+		gatewayapi.RouteConditionResolvedRefs: {
+			Type:    string(gatewayapi.RouteConditionResolvedRefs),
+			Reason:  string(gatewayapi.RouteReasonResolvedRefs),
 			Status:  metav1.ConditionTrue,
 			Message: "References resolved",
 		},
@@ -661,16 +662,16 @@ func markRouteAccepted(ctx context.Context, cl client.Client, l logr.Logger, rou
 // markRouteRejected adds a Status Condition to indicate that the
 // route has been rejected by its parent.
 func markRouteRejected(ctx context.Context, cl client.Client, l logr.Logger, routeKey client.ObjectKey) error {
-	conditions := map[gatewayv1a2.RouteConditionType]metav1.Condition{
-		gatewayv1a2.RouteConditionAccepted: {
-			Type:    string(gatewayv1a2.RouteConditionAccepted),
+	conditions := map[gatewayapi.RouteConditionType]metav1.Condition{
+		gatewayapi.RouteConditionAccepted: {
+			Type:    string(gatewayapi.RouteConditionAccepted),
 			Reason:  string(status.ReasonGatewayAllowMismatch),
 			Status:  metav1.ConditionFalse,
 			Message: "Reference not allowed by parent",
 		},
-		gatewayv1a2.RouteConditionResolvedRefs: {
-			Type:    string(gatewayv1a2.RouteConditionResolvedRefs),
-			Reason:  string(gatewayv1a2.RouteReasonResolvedRefs),
+		gatewayapi.RouteConditionResolvedRefs: {
+			Type:    string(gatewayapi.RouteConditionResolvedRefs),
+			Reason:  string(gatewayapi.RouteReasonResolvedRefs),
 			Status:  metav1.ConditionFalse,
 			Message: "References not allowed by parent",
 		},
@@ -680,18 +681,18 @@ func markRouteRejected(ctx context.Context, cl client.Client, l logr.Logger, rou
 }
 
 // markRouteConditions adds a Status Condition to the route.
-func markRouteConditions(ctx context.Context, cl client.Client, l logr.Logger, routeKey client.ObjectKey, conditions map[gatewayv1a2.RouteConditionType]metav1.Condition) error {
+func markRouteConditions(ctx context.Context, cl client.Client, l logr.Logger, routeKey client.ObjectKey, conditions map[gatewayapi.RouteConditionType]metav1.Condition) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		// Fetch the resource here; you need to refetch it on every try,
 		// since if you got a conflict on the last update attempt then
 		// you need to get the current version before making your own
 		// changes.
-		route := gatewayv1a2.HTTPRoute{}
+		route := gatewayapi.HTTPRoute{}
 		if err := cl.Get(ctx, routeKey, &route); err != nil {
 			return err
 		}
 
-		var route2 *gatewayv1a2.HTTPRoute
+		var route2 *gatewayapi.HTTPRoute
 		for _, gwRef := range route.Spec.ParentRefs {
 			// Use Contour code to add/update the Route's Status Condition to
 			// "Ready" with respect to this Gateway.
@@ -706,7 +707,7 @@ func markRouteConditions(ctx context.Context, cl client.Client, l logr.Logger, r
 			}
 
 			var ok bool
-			route2, ok = rcu.Mutate(&route).(*gatewayv1a2.HTTPRoute)
+			route2, ok = rcu.Mutate(&route).(*gatewayapi.HTTPRoute)
 			if !ok {
 				return fmt.Errorf("Failed to mutate Route")
 			}
@@ -719,7 +720,7 @@ func markRouteConditions(ctx context.Context, cl client.Client, l logr.Logger, r
 
 // namespacedNameOfParentRef returns the NamespacedName of a
 // ParentRef.
-func namespacedNameOfParentRef(ref gatewayv1a2.ParentReference, defaultNS string) types.NamespacedName {
+func namespacedNameOfParentRef(ref gatewayapi.ParentReference, defaultNS string) types.NamespacedName {
 	name := types.NamespacedName{Namespace: defaultNS, Name: string(ref.Name)}
 	if ref.Namespace != nil {
 		name.Namespace = string(*ref.Namespace)
@@ -729,7 +730,7 @@ func namespacedNameOfParentRef(ref gatewayv1a2.ParentReference, defaultNS string
 
 // namespacedNameOfHTTPBackendRef returns the NamespacedName of an
 // HTTPBackendRef.
-func namespacedNameOfHTTPBackendRef(ref gatewayv1a2.BackendRef, defaultNS string) types.NamespacedName {
+func namespacedNameOfHTTPBackendRef(ref gatewayapi.BackendRef, defaultNS string) types.NamespacedName {
 	name := types.NamespacedName{Namespace: defaultNS, Name: string(ref.Name)}
 	if ref.Namespace != nil {
 		name.Namespace = string(*ref.Namespace)

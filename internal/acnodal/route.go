@@ -8,7 +8,8 @@ import (
 	"fmt"
 	"net/http"
 
-	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayapi_v1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 type RouteCreate struct {
@@ -27,8 +28,8 @@ type RouteSpec struct {
 	// to this one.
 	ClientRef ClientRef `json:"clientRef,omitempty"`
 
-	HTTP *gatewayv1a2.HTTPRouteSpec `json:"http,omitempty"`
-	TCP  *gatewayv1a2.TCPRouteSpec  `json:"tcp,omitempty"`
+	HTTP *gatewayapi.HTTPRouteSpec         `json:"http,omitempty"`
+	TCP  *gatewayapi_v1alpha2.TCPRouteSpec `json:"tcp,omitempty"`
 }
 
 // RouteResponse is the body of the HTTP response to a request to show

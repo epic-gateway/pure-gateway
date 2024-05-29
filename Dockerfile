@@ -1,4 +1,4 @@
-FROM golang:1.19-bullseye as builder
+FROM golang:1.22-bookworm as builder
 
 WORKDIR /workspace
 # Copy the Go Modules manifests

@@ -15,6 +15,7 @@ package gatewayapi
 
 import (
 	"k8s.io/utils/pointer"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapi_v1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
@@ -147,8 +148,8 @@ func HTTPRouteMatch(pathType gatewayapi_v1alpha2.PathMatchType, value string) []
 func HTTPHeaderMatch(matchType gatewayapi_v1alpha2.HeaderMatchType, name, value string) []gatewayapi_v1alpha2.HTTPHeaderMatch {
 	return []gatewayapi_v1alpha2.HTTPHeaderMatch{
 		{
-			Type:  HeaderMatchTypePtr(gatewayapi_v1alpha2.HeaderMatchExact),
-			Name:  gatewayapi_v1alpha2.HTTPHeaderName(name),
+			Type:  HeaderMatchTypePtr(gatewayapi_v1alpha2.HeaderMatchType("Exact")),
+			Name:  gatewayapi.HTTPHeaderName(name),
 			Value: value,
 		},
 	}

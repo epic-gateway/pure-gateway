@@ -19,12 +19,13 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayapi_v1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	epicgwv1 "epic-gateway.org/puregw/apis/puregw/v1"
 	"epic-gateway.org/puregw/controllers"
 	"epic-gateway.org/puregw/internal/contour/dag"
-	"epic-gateway.org/puregw/internal/contour/gatewayapi"
+	contour_gatewayapi "epic-gateway.org/puregw/internal/contour/gatewayapi"
 	"epic-gateway.org/puregw/internal/contour/status"
 	"epic-gateway.org/puregw/internal/gateway"
 )
@@ -38,7 +39,7 @@ type GatewayReconciler struct {
 // SetupWithManager sets up the controller with the Manager.
 func (r *GatewayReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&gatewayv1a2.Gateway{}).
+		For(&gatewayapi.Gateway{}).
 		Complete(r)
 }
 
@@ -63,7 +64,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	l := log.FromContext(ctx)
 
 	// Get the Gateway that caused this request
-	gw := gatewayv1a2.Gateway{}
+	gw := gatewayapi.Gateway{}
 	if err := r.Get(ctx, req.NamespacedName, &gw); err != nil {
 		// ignore not-found errors, since they can't be fixed by an
 		// immediate requeue (we'll need to wait for a new notification),
@@ -128,7 +129,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	gsu := status.GatewayStatusUpdate{
 		FullName:           types.NamespacedName{Namespace: gw.Namespace, Name: gw.Name},
-		Conditions:         make(map[gatewayv1a2.GatewayConditionType]metav1.Condition),
+		Conditions:         make(map[gatewayapi.GatewayConditionType]metav1.Condition),
 		ExistingConditions: nil,
 		Generation:         gw.Generation,
 		TransitionTime:     metav1.NewTime(time.Now()),
@@ -149,9 +150,9 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				l.V(1).Info("TLS Error", "listener", listener.Name)
 			} else {
 				l.V(1).Info("TLS OK", "listener", listener.Name)
-				gsu.AddListenerCondition(string(listener.Name), gatewayv1a2.ListenerConditionReady, metav1.ConditionTrue, gatewayv1a2.ListenerReasonReady, "TLS OK")
-				gsu.AddListenerCondition(string(listener.Name), gatewayv1a2.ListenerConditionType("Accepted"), metav1.ConditionTrue, gatewayv1a2.ListenerReasonReady, "TLS OK")
-				gsu.AddListenerCondition(string(listener.Name), gatewayv1a2.ListenerConditionType("Programmed"), metav1.ConditionTrue, gatewayv1a2.ListenerConditionReason("Programmed"), "TLS OK")
+				gsu.AddListenerCondition(string(listener.Name), gatewayapi.ListenerConditionReady, metav1.ConditionTrue, gatewayapi.ListenerReasonReady, "TLS OK")
+				gsu.AddListenerCondition(string(listener.Name), gatewayapi.ListenerConditionType("Accepted"), metav1.ConditionTrue, gatewayapi.ListenerReasonReady, "TLS OK")
+				gsu.AddListenerCondition(string(listener.Name), gatewayapi.ListenerConditionType("Programmed"), metav1.ConditionTrue, gatewayapi.ListenerConditionReason("Programmed"), "TLS OK")
 			}
 		}
 	}
@@ -159,7 +160,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// If there's something wrong with the TLS config then mark the
 	// gateway and don't announce.
 	if !tlsOK {
-		gsu.AddCondition(gatewayv1a2.GatewayConditionScheduled, metav1.ConditionFalse, status.ReasonValidGateway, "Invalid GatewayTLS")
+		gsu.AddCondition(gatewayapi.GatewayConditionScheduled, metav1.ConditionFalse, status.ReasonValidGateway, "Invalid GatewayTLS")
 		gsu.AddCondition(status.ConditionAcceptedGateway, metav1.ConditionTrue, status.ReasonValidGateway, "Not announced to EPIC")
 		if err := updateStatus(ctx, r.Client, l, &gw, &gsu); err != nil {
 			return controllers.Done, err
@@ -177,7 +178,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	response, err := epic.AnnounceGateway(group.Links["create-proxy"], gw)
 	if err != nil {
 		// Tell the user that something has gone wrong
-		gsu.AddCondition(gatewayv1a2.GatewayConditionScheduled, metav1.ConditionFalse, status.ReasonValidGateway, err.Error())
+		gsu.AddCondition(gatewayapi.GatewayConditionScheduled, metav1.ConditionFalse, status.ReasonValidGateway, err.Error())
 		updateStatus(ctx, r.Client, l, &gw, &gsu)
 		return controllers.Done, err
 	}
@@ -205,7 +206,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// it. The new GW has a different UID so the EPIC GWRoutes won't
 	// link to the new GWGateway. We need to nudge the children so they
 	// send an update to EPIC that links to the new GWRoute.
-	children := []gatewayv1a2.HTTPRoute{}
+	children := []gatewayapi.HTTPRoute{}
 	if children, err = gatewayChildren(ctx, r.Client, l, &gw); err != nil {
 		return controllers.Done, err
 	}
@@ -222,7 +223,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 // Cleanup removes our finalizer from all of the Gateways in the
 // system.
 func (r *GatewayReconciler) Cleanup(l logr.Logger, ctx context.Context) error {
-	gwList := gatewayv1a2.GatewayList{}
+	gwList := gatewayapi.GatewayList{}
 	if err := r.Client.List(ctx, &gwList); err != nil {
 		return err
 	}
@@ -236,7 +237,7 @@ func (r *GatewayReconciler) Cleanup(l logr.Logger, ctx context.Context) error {
 
 func getEPICConfig(ctx context.Context, cl client.Client, gatewayClassName string) (*epicgwv1.GatewayClassConfig, error) {
 	// Get the owning GatewayClass
-	gc := gatewayv1a2.GatewayClass{}
+	gc := gatewayapi.GatewayClass{}
 	if err := cl.Get(ctx, types.NamespacedName{Name: gatewayClassName}, &gc); err != nil {
 		return nil, fmt.Errorf("Unable to get GatewayClass %s", gatewayClassName)
 	}
@@ -247,6 +248,9 @@ func getEPICConfig(ctx context.Context, cl client.Client, gatewayClassName strin
 	}
 
 	// Get the PureGW GatewayClassConfig referred to by the GatewayClass
+	if gc.Spec.ParametersRef == nil {
+		return nil, fmt.Errorf("GWC %s has no ParametersRef", gatewayClassName)
+	}
 	gwcName := types.NamespacedName{Namespace: "default", Name: string(gc.Spec.ParametersRef.Name)}
 	if gc.Spec.ParametersRef.Namespace != nil {
 		gwcName.Namespace = string(*gc.Spec.ParametersRef.Namespace)
@@ -260,7 +264,7 @@ func getEPICConfig(ctx context.Context, cl client.Client, gatewayClassName strin
 }
 
 // addEpicLink adds an EPICLinkAnnotation annotation to gw.
-func (r *GatewayReconciler) addEpicLink(ctx context.Context, gw *gatewayv1a2.Gateway, link string, configName string) error {
+func (r *GatewayReconciler) addEpicLink(ctx context.Context, gw *gatewayapi.Gateway, link string, configName string) error {
 	var (
 		patch      []map[string]interface{}
 		patchBytes []byte
@@ -313,14 +317,14 @@ func (r *GatewayReconciler) GetSecret(name types.NamespacedName) (*v1.Secret, er
 }
 
 // GetGrants implements the dag.Fetcher GetGrants() method.
-func (r *GatewayReconciler) GetGrants(ns string) (gatewayv1a2.ReferenceGrantList, error) {
-	classList := gatewayv1a2.ReferenceGrantList{}
+func (r *GatewayReconciler) GetGrants(ns string) (gatewayapi_v1beta1.ReferenceGrantList, error) {
+	classList := gatewayapi_v1beta1.ReferenceGrantList{}
 	return classList, r.List(context.Background(), &classList)
 }
 
 // updateStatus uses Contour's GatewayStatusUpdate to update the
 // Gateway's status.
-func updateStatus(ctx context.Context, cl client.Client, l logr.Logger, gw *gatewayv1a2.Gateway, gsu *status.GatewayStatusUpdate) error {
+func updateStatus(ctx context.Context, cl client.Client, l logr.Logger, gw *gatewayapi.Gateway, gsu *status.GatewayStatusUpdate) error {
 	key := client.ObjectKey{Namespace: gw.GetNamespace(), Name: gw.GetName()}
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -332,7 +336,7 @@ func updateStatus(ctx context.Context, cl client.Client, l logr.Logger, gw *gate
 			return err
 		}
 
-		got, ok := gsu.Mutate(gw).(*gatewayv1a2.Gateway)
+		got, ok := gsu.Mutate(gw).(*gatewayapi.Gateway)
 		if !ok {
 			return fmt.Errorf("Failed to mutate Gateway")
 		}
@@ -343,7 +347,7 @@ func updateStatus(ctx context.Context, cl client.Client, l logr.Logger, gw *gate
 }
 
 // markAddresses adds publicIP and publicHostname to gw's status.
-func markAddresses(ctx context.Context, cl client.Client, l logr.Logger, gw *gatewayv1a2.Gateway, publicIP string, publicHostname string) error {
+func markAddresses(ctx context.Context, cl client.Client, l logr.Logger, gw *gatewayapi.Gateway, publicIP string, publicHostname string) error {
 	key := client.ObjectKey{Namespace: gw.GetNamespace(), Name: gw.GetName()}
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -357,13 +361,13 @@ func markAddresses(ctx context.Context, cl client.Client, l logr.Logger, gw *gat
 
 		// Add the IP address to GW.Status so the user can find out what
 		// it is.
-		gw.Status.Addresses = []gatewayv1a2.GatewayAddress{{
-			Type:  gatewayapi.AddressTypePtr(gatewayv1a2.IPAddressType),
+		gw.Status.Addresses = []gatewayapi.GatewayStatusAddress{{
+			Type:  contour_gatewayapi.AddressTypePtr(gatewayapi.IPAddressType),
 			Value: publicIP,
 		}}
 		if publicHostname != "" {
-			gw.Status.Addresses = append(gw.Status.Addresses, gatewayv1a2.GatewayAddress{
-				Type:  gatewayapi.AddressTypePtr(gatewayv1a2.HostnameAddressType),
+			gw.Status.Addresses = append(gw.Status.Addresses, gatewayapi.GatewayStatusAddress{
+				Type:  contour_gatewayapi.AddressTypePtr(gatewayapi.HostnameAddressType),
 				Value: publicHostname,
 			})
 		}
@@ -382,7 +386,7 @@ func freshenStatus(ctx context.Context, cl client.Client, l logr.Logger, key cli
 		// since if you got a conflict on the last update attempt then
 		// you need to get the current version before making your own
 		// changes.
-		gw := gatewayv1a2.Gateway{}
+		gw := gatewayapi.Gateway{}
 		if err := cl.Get(ctx, key, &gw); err != nil {
 			return err
 		}
@@ -406,13 +410,13 @@ func freshenStatus(ctx context.Context, cl client.Client, l logr.Logger, key cli
 
 // gatewayChildren finds the HTTPRoutes that refer to gw. It's a
 // brute-force approach but will likely work up to 1000's of routes.
-func gatewayChildren(ctx context.Context, cl client.Client, l logr.Logger, gw *gatewayv1a2.Gateway) (routes []gatewayv1a2.HTTPRoute, err error) {
+func gatewayChildren(ctx context.Context, cl client.Client, l logr.Logger, gw *gatewayapi.Gateway) (routes []gatewayapi.HTTPRoute, err error) {
 	// FIXME: This will not scale, but that may be OK. I expect that
 	// most systems will have no more than a few dozen routes so
 	// iterating over all of them is probably OK.
 
 	// Get the routes that belong to this service.
-	routeList := gatewayv1a2.HTTPRouteList{}
+	routeList := gatewayapi.HTTPRouteList{}
 	if err = cl.List(ctx, &routeList, &client.ListOptions{Namespace: ""}); err != nil {
 		return
 	}
@@ -434,10 +438,10 @@ func gatewayChildren(ctx context.Context, cl client.Client, l logr.Logger, gw *g
 
 // isRefToGateway returns whether or not ref is a reference
 // to a Gateway with the given namespace & name.
-func isRefToGateway(ref gatewayv1a2.ParentReference, gateway types.NamespacedName) bool {
+func isRefToGateway(ref gatewayapi.ParentReference, gateway types.NamespacedName) bool {
 	// This is copied from internal/status/routeconditions.go which
 	// doesn't seem to handle "default" as a namespace.
-	if ref.Group != nil && *ref.Group != gatewayv1a2.GroupName {
+	if ref.Group != nil && *ref.Group != gatewayapi.GroupName {
 		return false
 	}
 
@@ -450,7 +454,7 @@ func isRefToGateway(ref gatewayv1a2.ParentReference, gateway types.NamespacedNam
 			return false
 		}
 	} else {
-		if *ref.Namespace != gatewayv1a2.Namespace(gateway.Namespace) {
+		if *ref.Namespace != gatewayapi.Namespace(gateway.Namespace) {
 			return false
 		}
 	}
@@ -458,10 +462,10 @@ func isRefToGateway(ref gatewayv1a2.ParentReference, gateway types.NamespacedNam
 	return string(ref.Name) == gateway.Name
 }
 
-func setSupportedKinds(l logr.Logger, name string, rgks []gatewayv1a2.RouteGroupKind, gsu *status.GatewayStatusUpdate) {
+func setSupportedKinds(l logr.Logger, name string, rgks []gatewayapi.RouteGroupKind, gsu *status.GatewayStatusUpdate) {
 	var (
 		anyUnsupported bool = false
-		kinds          []gatewayv1a2.Kind
+		kinds          []gatewayapi.Kind
 	)
 
 	if len(rgks) == 0 { // No Kinds were specified - set a default
@@ -480,12 +484,12 @@ func setSupportedKinds(l logr.Logger, name string, rgks []gatewayv1a2.RouteGroup
 
 	if len(kinds) == 0 { // Hard error: none of the specified Kinds were supported
 		l.V(1).Info("Config Error", "error", "No Valid Route Kind", "listener", name)
-		gsu.AddListenerCondition(name, gatewayv1a2.ListenerConditionResolvedRefs, metav1.ConditionFalse, gatewayv1a2.ListenerReasonInvalidRouteKinds, "Listener configuration error")
+		gsu.AddListenerCondition(name, gatewayapi.ListenerConditionResolvedRefs, metav1.ConditionFalse, gatewayapi.ListenerReasonInvalidRouteKinds, "Listener configuration error")
 		return
 	}
 
 	if anyUnsupported { // The user specified at least one unsupported Kind
-		gsu.AddListenerCondition(name, gatewayv1a2.ListenerConditionResolvedRefs, metav1.ConditionFalse, gatewayv1a2.ListenerReasonInvalidRouteKinds, "Listener configuration error")
+		gsu.AddListenerCondition(name, gatewayapi.ListenerConditionResolvedRefs, metav1.ConditionFalse, gatewayapi.ListenerReasonInvalidRouteKinds, "Listener configuration error")
 	}
 
 	gsu.SetListenerSupportedKinds(name, kinds)

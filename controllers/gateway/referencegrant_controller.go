@@ -12,7 +12,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapi_v1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	"epic-gateway.org/puregw/controllers"
 	"epic-gateway.org/puregw/internal/gateway"
@@ -27,7 +27,7 @@ type ReferenceGrantReconciler struct {
 // SetupWithManager sets up the controller with the Manager.
 func (r *ReferenceGrantReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&gatewayv1a2.ReferenceGrant{}).
+		For(&gatewayapi_v1beta1.ReferenceGrant{}).
 		Complete(r)
 }
 
@@ -50,7 +50,7 @@ func (r *ReferenceGrantReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	l := log.FromContext(ctx)
 
 	// Get the Grant that caused this request
-	grant := gatewayv1a2.ReferenceGrant{}
+	grant := gatewayapi_v1beta1.ReferenceGrant{}
 	if err := r.Get(ctx, req.NamespacedName, &grant); err != nil {
 		// ignore not-found errors, since they can't be fixed by an
 		// immediate requeue (we'll need to wait for a new notification),
@@ -91,7 +91,7 @@ func (r *ReferenceGrantReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 // FIXME: we could be less brute-force, i.e., find only the Gateways
 // that reference this Grant and nudge only those.
 func (r *ReferenceGrantReconciler) NudgeGateways(l logr.Logger, ctx context.Context) error {
-	gwList := gatewayv1a2.GatewayList{}
+	gwList := gatewayapi_v1beta1.GatewayList{}
 	if err := r.Client.List(ctx, &gwList); err != nil {
 		return err
 	}

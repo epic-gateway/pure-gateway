@@ -3,7 +3,8 @@ package gateway
 import (
 	"fmt"
 
-	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayapi_v1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	epicgwv1 "epic-gateway.org/puregw/apis/puregw/v1"
 	"epic-gateway.org/puregw/internal/contour/dag"
@@ -12,7 +13,7 @@ import (
 // GatewayEPICUID returns this Gateway's EPIC UID. This can be either
 // the local resource's UID (if it's not a shared Gateway) or the
 // value of the sharing key annotation (if it is a shared gateway).
-func GatewayEPICUID(gw gatewayv1a2.Gateway) string {
+func GatewayEPICUID(gw gatewayapi.Gateway) string {
 	// Assume that this GW will be non-shared
 	uid := string(gw.UID)
 
@@ -28,8 +29,8 @@ func GatewayEPICUID(gw gatewayv1a2.Gateway) string {
 // GatewayAllowsHTTPRoute determines whether or not gw allows
 // route. If error is nil then route is allowed, but if it's non-nil
 // then gw has rejected route.
-func GatewayAllowsHTTPRoute(gw gatewayv1a2.Gateway, route gatewayv1a2.HTTPRoute) error {
-	if err := GatewayAllowsKind(gw, (*gatewayv1a2.Kind)(&route.Kind)); err != nil {
+func GatewayAllowsHTTPRoute(gw gatewayapi.Gateway, route gatewayapi.HTTPRoute) error {
+	if err := GatewayAllowsKind(gw, (*gatewayapi.Kind)(&route.Kind)); err != nil {
 		return err
 	}
 
@@ -43,15 +44,15 @@ func GatewayAllowsHTTPRoute(gw gatewayv1a2.Gateway, route gatewayv1a2.HTTPRoute)
 // GatewayAllowsHTTPRoute determines whether or not gw allows
 // route. If error is nil then route is allowed, but if it's non-nil
 // then gw has rejected route.
-func GatewayAllowsTCPRoute(gw gatewayv1a2.Gateway, route gatewayv1a2.TCPRoute) error {
-	return GatewayAllowsKind(gw, (*gatewayv1a2.Kind)(&route.Kind))
+func GatewayAllowsTCPRoute(gw gatewayapi.Gateway, route gatewayapi_v1alpha2.TCPRoute) error {
+	return GatewayAllowsKind(gw, (*gatewayapi.Kind)(&route.Kind))
 }
 
 // GatewayAllowsHTTPRoute determines whether or not gw allows route's
 // hostnames. If error is nil then route's hostnames are allowed, but
 // if it's non-nil then there's no intersection between gw's hostnames
 // and route's hostnames.
-func GatewayAllowsHostnames(gw gatewayv1a2.Gateway, route gatewayv1a2.HTTPRoute) error {
+func GatewayAllowsHostnames(gw gatewayapi.Gateway, route gatewayapi.HTTPRoute) error {
 	for _, listener := range gw.Spec.Listeners {
 		hosts, errs := dag.ComputeHosts(route.Spec.Hostnames, listener.Hostname)
 
@@ -74,7 +75,7 @@ func GatewayAllowsHostnames(gw gatewayv1a2.Gateway, route gatewayv1a2.HTTPRoute)
 // GatewayAllowsKind checks whether gw allows attachment by
 // routeKind. If error is nil then attachment is allowed but if not
 // then it isn't.
-func GatewayAllowsKind(gw gatewayv1a2.Gateway, routeKind *gatewayv1a2.Kind) error {
+func GatewayAllowsKind(gw gatewayapi.Gateway, routeKind *gatewayapi.Kind) error {
 	for _, listener := range gw.Spec.Listeners {
 		if err := allowsKind(listener.AllowedRoutes, routeKind); err != nil {
 			return err
@@ -83,7 +84,7 @@ func GatewayAllowsKind(gw gatewayv1a2.Gateway, routeKind *gatewayv1a2.Kind) erro
 	return nil
 }
 
-func allowsKind(allow *gatewayv1a2.AllowedRoutes, routeKind *gatewayv1a2.Kind) error {
+func allowsKind(allow *gatewayapi.AllowedRoutes, routeKind *gatewayapi.Kind) error {
 	for _, gk := range allow.Kinds {
 		if &gk.Kind != routeKind {
 			return fmt.Errorf("Kind mismatch: %s vs %s", gk.Kind, *routeKind)

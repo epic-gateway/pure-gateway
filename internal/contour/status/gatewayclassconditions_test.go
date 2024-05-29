@@ -19,8 +19,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	utilclock "k8s.io/apimachinery/pkg/util/clock"
-	gatewayapi_v1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	utilclock "k8s.io/utils/clock"
+	utilclock_testing "k8s.io/utils/clock/testing"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 func TestConditionChanged(t *testing.T) {
@@ -44,12 +45,12 @@ func TestConditionChanged(t *testing.T) {
 			name:     "condition LastTransitionTime should be ignored",
 			expected: false,
 			a: metav1.Condition{
-				Type:               string(gatewayapi_v1alpha2.GatewayClassConditionStatusAccepted),
+				Type:               string(gatewayapi.GatewayClassConditionStatusAccepted),
 				Status:             metav1.ConditionTrue,
 				LastTransitionTime: metav1.Unix(0, 0),
 			},
 			b: metav1.Condition{
-				Type:               string(gatewayapi_v1alpha2.GatewayClassConditionStatusAccepted),
+				Type:               string(gatewayapi.GatewayClassConditionStatusAccepted),
 				Status:             metav1.ConditionTrue,
 				LastTransitionTime: metav1.Unix(1, 0),
 			},
@@ -58,12 +59,12 @@ func TestConditionChanged(t *testing.T) {
 			name:     "check condition reason differs",
 			expected: true,
 			a: metav1.Condition{
-				Type:   string(gatewayapi_v1alpha2.GatewayConditionReady),
+				Type:   string(gatewayapi.GatewayConditionReady),
 				Status: metav1.ConditionFalse,
 				Reason: "foo",
 			},
 			b: metav1.Condition{
-				Type:   string(gatewayapi_v1alpha2.GatewayConditionReady),
+				Type:   string(gatewayapi.GatewayConditionReady),
 				Status: metav1.ConditionFalse,
 				Reason: "bar",
 			},
@@ -72,11 +73,11 @@ func TestConditionChanged(t *testing.T) {
 			name:     "condition status differs",
 			expected: true,
 			a: metav1.Condition{
-				Type:   string(gatewayapi_v1alpha2.GatewayClassConditionStatusAccepted),
+				Type:   string(gatewayapi.GatewayClassConditionStatusAccepted),
 				Status: metav1.ConditionTrue,
 			},
 			b: metav1.Condition{
-				Type:   string(gatewayapi_v1alpha2.GatewayClassConditionStatusAccepted),
+				Type:   string(gatewayapi.GatewayClassConditionStatusAccepted),
 				Status: metav1.ConditionFalse,
 			},
 		},
@@ -91,7 +92,7 @@ func TestConditionChanged(t *testing.T) {
 
 func TestMergeConditions(t *testing.T) {
 	// Inject a fake clock and don't forget to reset it
-	fakeClock := utilclock.NewFakeClock(time.Time{})
+	fakeClock := utilclock_testing.NewFakeClock(time.Time{})
 	clock = fakeClock
 	defer func() {
 		clock = utilclock.RealClock{}

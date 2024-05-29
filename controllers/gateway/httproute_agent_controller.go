@@ -21,7 +21,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 
 	epicgwv1 "epic-gateway.org/puregw/apis/puregw/v1"
 	"epic-gateway.org/puregw/controllers"
@@ -39,7 +39,7 @@ type HTTPRouteAgentReconciler struct {
 // SetupWithManager sets up the controller with the Manager.
 func (r *HTTPRouteAgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&gatewayv1a2.HTTPRoute{}).
+		For(&gatewayapi.HTTPRoute{}).
 		Complete(r)
 }
 
@@ -66,7 +66,7 @@ func (r *HTTPRouteAgentReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	l := log.FromContext(ctx)
 
 	// Get the Resource that triggered this request
-	route := gatewayv1a2.HTTPRoute{}
+	route := gatewayapi.HTTPRoute{}
 	if err := r.Get(ctx, req.NamespacedName, &route); err != nil {
 		// Ignore not-found errors, since they can't be fixed by an
 		// immediate requeue (we'll need to wait for a new notification),
@@ -85,7 +85,7 @@ func (r *HTTPRouteAgentReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// Try to get the Gateway to which we refer, and keep trying until
 	// we can.
-	gw := gatewayv1a2.Gateway{}
+	gw := gatewayapi.Gateway{}
 	// FIXME: need to handle multiple parents
 	if err := parentGW(ctx, r.Client, route.Namespace, route.Spec.ParentRefs[0], &gw); err != nil {
 		l.Info("Can't get parent, will retry", "parentRef", route.Spec.ParentRefs[0])
@@ -157,7 +157,7 @@ func (r *HTTPRouteAgentReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 // Cleanup removes our finalizer from all of the HTTPRoutes in the
 // system.
 func (r *HTTPRouteAgentReconciler) Cleanup(l logr.Logger, ctx context.Context) error {
-	routeList := gatewayv1a2.HTTPRouteList{}
+	routeList := gatewayapi.HTTPRouteList{}
 	if err := r.Client.List(ctx, &routeList); err != nil {
 		return err
 	}
@@ -169,7 +169,7 @@ func (r *HTTPRouteAgentReconciler) Cleanup(l logr.Logger, ctx context.Context) e
 	return nil
 }
 
-func setupTunnels(l logr.Logger, gw *gatewayv1a2.Gateway, spec epicgwv1.TrueIngress, slices []*discoveryv1.EndpointSlice, epic acnodal.EPIC, isEKS bool, nodeIPV4 net.IP) (incomplete bool, err error) {
+func setupTunnels(l logr.Logger, gw *gatewayapi.Gateway, spec epicgwv1.TrueIngress, slices []*discoveryv1.EndpointSlice, epic acnodal.EPIC, isEKS bool, nodeIPV4 net.IP) (incomplete bool, err error) {
 	// Get the service that owns this endpoint. This endpoint
 	// will either re-use an existing tunnel or set up a new one
 	// for this node. Tunnels belong to the service.

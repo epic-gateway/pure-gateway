@@ -18,15 +18,15 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	utilclock "k8s.io/apimachinery/pkg/util/clock"
+	utilclock "k8s.io/utils/clock"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	gatewayapi_v1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-const ConditionNotImplemented gatewayapi_v1alpha2.RouteConditionType = "NotImplemented"
-const ConditionResolvedRefs gatewayapi_v1alpha2.RouteConditionType = "ResolvedRefs"
-const ConditionValidBackendRefs gatewayapi_v1alpha2.RouteConditionType = "ValidBackendRefs"
-const ConditionValidMatches gatewayapi_v1alpha2.RouteConditionType = "ValidMatches"
+const ConditionNotImplemented gatewayapi.RouteConditionType = "NotImplemented"
+const ConditionResolvedRefs gatewayapi.RouteConditionType = "ResolvedRefs"
+const ConditionValidBackendRefs gatewayapi.RouteConditionType = "ValidBackendRefs"
+const ConditionValidMatches gatewayapi.RouteConditionType = "ValidMatches"
 
 type RouteReasonType string
 
@@ -43,7 +43,7 @@ const ReasonNoMatchingListenerHostname RouteReasonType = "NoMatchingListenerHost
 const ReasonAccepted RouteReasonType = "Accepted"
 
 const (
-	ReasonDegraded gatewayapi_v1alpha2.RouteConditionReason = "Degraded"
+	ReasonDegraded gatewayapi.RouteConditionReason = "Degraded"
 )
 
 // clock is used to set lastTransitionTime on status conditions.
@@ -51,17 +51,17 @@ var clock utilclock.Clock = utilclock.RealClock{}
 
 type RouteConditionsUpdate struct {
 	FullName           types.NamespacedName
-	Conditions         map[gatewayapi_v1alpha2.RouteConditionType]metav1.Condition
-	ExistingConditions map[gatewayapi_v1alpha2.RouteConditionType]metav1.Condition
+	Conditions         map[gatewayapi.RouteConditionType]metav1.Condition
+	ExistingConditions map[gatewayapi.RouteConditionType]metav1.Condition
 	GatewayRef         types.NamespacedName
-	GatewayController  gatewayapi_v1alpha2.GatewayController
+	GatewayController  gatewayapi.GatewayController
 	Resource           client.Object
 	Generation         int64
 	TransitionTime     metav1.Time
 }
 
 // AddCondition returns a metav1.Condition for a given ConditionType.
-func (routeUpdate *RouteConditionsUpdate) AddCondition(cond gatewayapi_v1alpha2.RouteConditionType, status metav1.ConditionStatus, reason RouteReasonType, message string) metav1.Condition {
+func (routeUpdate *RouteConditionsUpdate) AddCondition(cond gatewayapi.RouteConditionType, status metav1.ConditionStatus, reason RouteReasonType, message string) metav1.Condition {
 
 	if c, ok := routeUpdate.Conditions[cond]; ok {
 		message = fmt.Sprintf("%s, %s", c.Message, message)
@@ -81,7 +81,7 @@ func (routeUpdate *RouteConditionsUpdate) AddCondition(cond gatewayapi_v1alpha2.
 
 func (routeUpdate *RouteConditionsUpdate) Mutate(obj client.Object) client.Object {
 
-	var gatewayStatuses []gatewayapi_v1alpha2.RouteParentStatus
+	var gatewayStatuses []gatewayapi.RouteParentStatus
 	var conditionsToWrite []metav1.Condition
 
 	for _, cond := range routeUpdate.Conditions {
@@ -114,27 +114,27 @@ func (routeUpdate *RouteConditionsUpdate) Mutate(obj client.Object) client.Objec
 		}
 	}
 
-	gatewayStatuses = append(gatewayStatuses, gatewayapi_v1alpha2.RouteParentStatus{
+	gatewayStatuses = append(gatewayStatuses, gatewayapi.RouteParentStatus{
 		ParentRef:      parentRefForGateway(routeUpdate.GatewayRef),
 		ControllerName: routeUpdate.GatewayController,
 		Conditions:     conditionsToWrite,
 	})
 
 	switch o := obj.(type) {
-	case *gatewayapi_v1alpha2.HTTPRoute:
+	case *gatewayapi.HTTPRoute:
 		route := o.DeepCopy()
 
 		// Set the HTTPRoute status.
 		gatewayStatuses = append(gatewayStatuses, routeUpdate.combineConditions(route.Status.Parents)...)
 		route.Status.RouteStatus.Parents = gatewayStatuses
 		return route
-	case *gatewayapi_v1alpha2.TLSRoute:
-		route := o.DeepCopy()
+	// case *gatewayapi_v1alpha2.TLSRoute:
+	// 	route := o.DeepCopy()
 
-		// Set the TLSRoute status.
-		gatewayStatuses = append(gatewayStatuses, routeUpdate.combineConditions(route.Status.Parents)...)
-		route.Status.RouteStatus.Parents = gatewayStatuses
-		return route
+	// 	// Set the TLSRoute status.
+	// 	gatewayStatuses = append(gatewayStatuses, routeUpdate.combineConditions(route.Status.Parents)...)
+	// 	route.Status.RouteStatus.Parents = gatewayStatuses
+	// 	return route
 	default:
 		panic(fmt.Sprintf("Unsupported %T object %s/%s in RouteConditionsUpdate status mutator",
 			obj, routeUpdate.FullName.Namespace, routeUpdate.FullName.Name,
@@ -144,8 +144,8 @@ func (routeUpdate *RouteConditionsUpdate) Mutate(obj client.Object) client.Objec
 
 // combineConditions (due for a rename) returns all RouteParentStatuses
 // from gwStatus that are *not* for the routeUpdate's Gateway.
-func (routeUpdate *RouteConditionsUpdate) combineConditions(gwStatus []gatewayapi_v1alpha2.RouteParentStatus) []gatewayapi_v1alpha2.RouteParentStatus {
-	var gatewayStatuses []gatewayapi_v1alpha2.RouteParentStatus
+func (routeUpdate *RouteConditionsUpdate) combineConditions(gwStatus []gatewayapi.RouteParentStatus) []gatewayapi.RouteParentStatus {
+	var gatewayStatuses []gatewayapi.RouteParentStatus
 
 	// Now that we have all the conditions, add them back to the object
 	// to get written out.
@@ -160,26 +160,26 @@ func (routeUpdate *RouteConditionsUpdate) combineConditions(gwStatus []gatewayap
 
 // isRefToGateway returns whether or not ref is a reference
 // to a Gateway with the given namespace & name.
-func isRefToGateway(ref gatewayapi_v1alpha2.ParentReference, gateway types.NamespacedName) bool {
-	return ref.Group != nil && *ref.Group == gatewayapi_v1alpha2.GroupName &&
+func isRefToGateway(ref gatewayapi.ParentReference, gateway types.NamespacedName) bool {
+	return ref.Group != nil && *ref.Group == gatewayapi.GroupName &&
 		ref.Kind != nil && *ref.Kind == "Gateway" &&
-		ref.Namespace != nil && *ref.Namespace == gatewayapi_v1alpha2.Namespace(gateway.Namespace) &&
+		ref.Namespace != nil && *ref.Namespace == gatewayapi.Namespace(gateway.Namespace) &&
 		string(ref.Name) == gateway.Name
 }
 
 // parentRefForGateway returns a ParentRef for a Gateway with
 // the given namespace and name.
-func parentRefForGateway(gateway types.NamespacedName) gatewayapi_v1alpha2.ParentReference {
+func parentRefForGateway(gateway types.NamespacedName) gatewayapi.ParentReference {
 	var (
-		group     = gatewayapi_v1alpha2.Group(gatewayapi_v1alpha2.GroupName)
-		kind      = gatewayapi_v1alpha2.Kind("Gateway")
-		namespace = gatewayapi_v1alpha2.Namespace(gateway.Namespace)
+		group     = gatewayapi.Group(gatewayapi.GroupName)
+		kind      = gatewayapi.Kind("Gateway")
+		namespace = gatewayapi.Namespace(gateway.Namespace)
 	)
 
-	return gatewayapi_v1alpha2.ParentReference{
+	return gatewayapi.ParentReference{
 		Group:     &group,
 		Kind:      &kind,
 		Namespace: &namespace,
-		Name:      gatewayapi_v1alpha2.ObjectName(gateway.Name),
+		Name:      gatewayapi.ObjectName(gateway.Name),
 	}
 }

@@ -15,7 +15,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	gatewayv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 
 	epicgwv1 "epic-gateway.org/puregw/apis/puregw/v1"
 	"epic-gateway.org/puregw/controllers"
@@ -25,14 +25,14 @@ import (
 
 var (
 	gwccAccepted metav1.Condition = metav1.Condition{
-		Type:    string(gatewayv1a2.GatewayClassConditionStatusAccepted),
+		Type:    string(gatewayapi.GatewayClassConditionStatusAccepted),
 		Status:  metav1.ConditionTrue,
 		Reason:  "Valid",
 		Message: "EPIC connection succeeded",
 	}
 
 	gwccCantConnect metav1.Condition = metav1.Condition{
-		Type:    string(gatewayv1a2.GatewayClassConditionStatusAccepted),
+		Type:    string(gatewayapi.GatewayClassConditionStatusAccepted),
 		Status:  metav1.ConditionFalse,
 		Reason:  "Invalid",
 		Message: "Invalid GatewayClassConfig: unable to connect to EPIC: ",
@@ -92,7 +92,7 @@ func (r *GatewayClassConfigReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	// Nudge this GWConfig's GatewayClasses. This will cause them to
 	// update their Status.Conditions.
-	children := []gatewayv1a2.GatewayClass{}
+	children := []gatewayapi.GatewayClass{}
 	if children, err = configChildren(ctx, r.Client, l, &gwcc); err != nil {
 		return controllers.Done, err
 	}
@@ -130,13 +130,13 @@ func markAcceptance(ctx context.Context, cl client.Client, l logr.Logger, gwcc *
 
 // configChildren finds the HTTPRoutes that refer to gw. It's a
 // brute-force approach but will likely work up to 1000's of routes.
-func configChildren(ctx context.Context, cl client.Client, l logr.Logger, gwcc *epicgwv1.GatewayClassConfig) (classes []gatewayv1a2.GatewayClass, err error) {
+func configChildren(ctx context.Context, cl client.Client, l logr.Logger, gwcc *epicgwv1.GatewayClassConfig) (classes []gatewayapi.GatewayClass, err error) {
 	// FIXME: This will not scale, but that may be OK. I expect that
 	// most systems will have no more than a few classes so iterating
 	// over all of them is probably OK.
 
 	// Get the classes that belong to this service.
-	classList := gatewayv1a2.GatewayClassList{}
+	classList := gatewayapi.GatewayClassList{}
 	if err = cl.List(ctx, &classList); err != nil {
 		return
 	}
@@ -156,7 +156,7 @@ func configChildren(ctx context.Context, cl client.Client, l logr.Logger, gwcc *
 
 // isRefToConfig returns whether or not ref is a reference to a
 // Gateway with the given namespace & name.
-func isRefToConfig(ref *gatewayv1a2.ParametersReference, name types.NamespacedName) bool {
+func isRefToConfig(ref *gatewayapi.ParametersReference, name types.NamespacedName) bool {
 	if ref == nil {
 		return false
 	}
@@ -174,7 +174,7 @@ func isRefToConfig(ref *gatewayv1a2.ParametersReference, name types.NamespacedNa
 			return false
 		}
 	} else {
-		if *ref.Namespace != gatewayv1a2.Namespace(name.Namespace) {
+		if *ref.Namespace != gatewayapi.Namespace(name.Namespace) {
 			return false
 		}
 	}
