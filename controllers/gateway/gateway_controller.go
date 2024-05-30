@@ -135,6 +135,9 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		TransitionTime:     metav1.NewTime(time.Now()),
 	}
 
+	// Indicate that we're working on this Gateway
+	gsu.AddCondition(status.ConditionProgrammedGateway, metav1.ConditionTrue, status.ReasonAcceptedGateway, "Programmed")
+
 	// Set the listener supportedKinds
 	for _, listener := range gw.Spec.Listeners {
 		setSupportedKinds(l, string(listener.Name), listener.AllowedRoutes.Kinds, &gsu)
@@ -150,17 +153,15 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				l.V(1).Info("TLS Error", "listener", listener.Name)
 			} else {
 				l.V(1).Info("TLS OK", "listener", listener.Name)
-				gsu.AddListenerCondition(string(listener.Name), gatewayapi.ListenerConditionReady, metav1.ConditionTrue, gatewayapi.ListenerReasonReady, "TLS OK")
-				gsu.AddListenerCondition(string(listener.Name), gatewayapi.ListenerConditionType("Accepted"), metav1.ConditionTrue, gatewayapi.ListenerReasonReady, "TLS OK")
-				gsu.AddListenerCondition(string(listener.Name), gatewayapi.ListenerConditionType("Programmed"), metav1.ConditionTrue, gatewayapi.ListenerConditionReason("Programmed"), "TLS OK")
 			}
 		}
+		gsu.AddListenerCondition(string(listener.Name), gatewayapi.ListenerConditionAccepted, metav1.ConditionTrue, gatewayapi.ListenerReasonAccepted, "Accepted")
+		gsu.AddListenerCondition(string(listener.Name), gatewayapi.ListenerConditionProgrammed, metav1.ConditionTrue, gatewayapi.ListenerReasonProgrammed, "Programmed")
 	}
 
 	// If there's something wrong with the TLS config then mark the
 	// gateway and don't announce.
 	if !tlsOK {
-		gsu.AddCondition(gatewayapi.GatewayConditionScheduled, metav1.ConditionFalse, status.ReasonValidGateway, "Invalid GatewayTLS")
 		gsu.AddCondition(status.ConditionAcceptedGateway, metav1.ConditionTrue, status.ReasonValidGateway, "Not announced to EPIC")
 		if err := updateStatus(ctx, r.Client, l, &gw, &gsu); err != nil {
 			return controllers.Done, err
@@ -178,7 +179,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	response, err := epic.AnnounceGateway(group.Links["create-proxy"], gw)
 	if err != nil {
 		// Tell the user that something has gone wrong
-		gsu.AddCondition(gatewayapi.GatewayConditionScheduled, metav1.ConditionFalse, status.ReasonValidGateway, err.Error())
+		gsu.AddCondition(status.ConditionAcceptedGateway, metav1.ConditionFalse, status.ReasonValidGateway, err.Error())
 		updateStatus(ctx, r.Client, l, &gw, &gsu)
 		return controllers.Done, err
 	}
@@ -196,7 +197,6 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	// Tell the user that we're working on bringing up the Gateway.
 	gsu.AddCondition(status.ConditionAcceptedGateway, metav1.ConditionTrue, status.ReasonAcceptedGateway, "Announced to EPIC")
-	gsu.AddCondition(status.ConditionProgrammedGateway, metav1.ConditionTrue, status.ReasonAcceptedGateway, "Programmed")
 	if err := updateStatus(ctx, r.Client, l, &gw, &gsu); err != nil {
 		return controllers.Done, err
 	}
@@ -468,17 +468,17 @@ func setSupportedKinds(l logr.Logger, name string, rgks []gatewayapi.RouteGroupK
 		kinds          []gatewayapi.Kind
 	)
 
-	if len(rgks) == 0 { // No Kinds were specified - set a default
-		gsu.SetListenerSupportedKinds(name, epicgwv1.SupportedKinds)
-		return
-	}
-
-	// Check the user-specified Kinds to ensure that we support them
-	for _, kind := range rgks {
-		if epicgwv1.SupportedKind(kind.Kind) {
-			kinds = append(kinds, kind.Kind)
-		} else {
-			anyUnsupported = true
+	if len(rgks) == 0 {
+		// No Kinds were specified - add a default
+		kinds = append(kinds, epicgwv1.SupportedKinds...)
+	} else {
+		// Check the user-specified Kinds to ensure that we support them
+		for _, kind := range rgks {
+			if epicgwv1.SupportedKind(kind.Kind) {
+				kinds = append(kinds, kind.Kind)
+			} else {
+				anyUnsupported = true
+			}
 		}
 	}
 
@@ -490,6 +490,8 @@ func setSupportedKinds(l logr.Logger, name string, rgks []gatewayapi.RouteGroupK
 
 	if anyUnsupported { // The user specified at least one unsupported Kind
 		gsu.AddListenerCondition(name, gatewayapi.ListenerConditionResolvedRefs, metav1.ConditionFalse, gatewayapi.ListenerReasonInvalidRouteKinds, "Listener configuration error")
+	} else {
+		gsu.AddListenerCondition(name, gatewayapi.ListenerConditionResolvedRefs, metav1.ConditionTrue, gatewayapi.ListenerReasonResolvedRefs, "Resolved")
 	}
 
 	gsu.SetListenerSupportedKinds(name, kinds)
