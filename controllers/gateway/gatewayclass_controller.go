@@ -132,6 +132,11 @@ func markAcceptance(ctx context.Context, cl client.Client, l logr.Logger, gc *ga
 		}
 
 		gc.Status.Conditions = status.MergeConditions(gc.Status.Conditions, status.RefreshCondition(&gc.ObjectMeta, accepted))
+		gc.Status.SupportedFeatures = []gatewayapi.SupportedFeature{
+			gatewayapi.SupportedFeature("Gateway"),
+			gatewayapi.SupportedFeature("ReferenceGrant"),
+			gatewayapi.SupportedFeature("HTTPRoute"),
+		}
 
 		// Try to update
 		return cl.Status().Update(ctx, gc)
