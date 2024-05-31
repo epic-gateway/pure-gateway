@@ -6,6 +6,7 @@ package gateway
 
 import (
 	"context"
+	"time"
 
 	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -121,6 +122,7 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 // accept or reject this GatewayClass.
 func markAcceptance(ctx context.Context, cl client.Client, l logr.Logger, gc *gatewayapi.GatewayClass, accepted metav1.Condition) error {
 	key := client.ObjectKey{Namespace: gc.GetNamespace(), Name: gc.GetName()}
+	now := metav1.NewTime(time.Now())
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		// Fetch the resource here; you need to refetch it on every try,
@@ -132,6 +134,13 @@ func markAcceptance(ctx context.Context, cl client.Client, l logr.Logger, gc *ga
 		}
 
 		gc.Status.Conditions = status.MergeConditions(gc.Status.Conditions, status.RefreshCondition(&gc.ObjectMeta, accepted))
+
+		// Update the Conditions' ObservedGenerations
+		for i := range gc.Status.Conditions {
+			gc.Status.Conditions[i].ObservedGeneration = gc.ObjectMeta.Generation
+			gc.Status.Conditions[i].LastTransitionTime = now
+		}
+
 		gc.Status.SupportedFeatures = []gatewayapi.SupportedFeature{
 			gatewayapi.SupportedFeature("Gateway"),
 			gatewayapi.SupportedFeature("ReferenceGrant"),
