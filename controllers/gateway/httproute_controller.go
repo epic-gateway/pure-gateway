@@ -127,15 +127,16 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 
 		// Make sure that the Gateway will allow this Route to attach
-		if err := gateway.GatewayAllowsHTTPRoute(gw, route); err != nil {
+		if cond := gateway.GatewayAllowsHTTPRoute(gw, route, r); cond != nil {
 			l.V(1).Info("Gateway rejected HTTPRoute", "gw", gw.Name)
 
 			// Update the Route's status
 			var notAllowed = map[gatewayapi.RouteConditionType]metav1.Condition{
-				gatewayapi.RouteConditionAccepted: {
-					Type:    string(gatewayapi.RouteConditionAccepted),
-					Reason:  string(status.ReasonNoMatchingListenerHostname),
-					Status:  metav1.ConditionFalse,
+				gatewayapi.RouteConditionAccepted: *cond,
+				gatewayapi.RouteConditionResolvedRefs: {
+					Type:    string(gatewayapi.RouteConditionResolvedRefs),
+					Reason:  string(gatewayapi.RouteReasonResolvedRefs),
+					Status:  metav1.ConditionTrue,
 					Message: "Reference not allowed by parent",
 				},
 			}
@@ -359,6 +360,12 @@ func (r *HTTPRouteReconciler) GetSecret(name types.NamespacedName) (*corev1.Secr
 func (r *HTTPRouteReconciler) GetGrants(ns string) (gatewayapi_v1beta1.ReferenceGrantList, error) {
 	classList := gatewayapi_v1beta1.ReferenceGrantList{}
 	return classList, r.List(context.Background(), &classList)
+}
+
+// GetGrants implements the dag.Fetcher GetGrants() method.
+func (r *HTTPRouteReconciler) GetNamespace(name types.NamespacedName) (*corev1.Namespace, error) {
+	ns := corev1.Namespace{}
+	return &ns, r.Get(context.Background(), name, &ns)
 }
 
 // announceSlices announces the slices that this HTTPRoute

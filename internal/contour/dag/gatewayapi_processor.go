@@ -21,12 +21,13 @@ import (
 	"epic-gateway.org/puregw/internal/contour/status"
 
 	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/utils/ptr"
-	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayapi_v1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapi_v1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
@@ -37,20 +38,21 @@ const (
 type Fetcher interface {
 	GetSecret(name types.NamespacedName) (*v1.Secret, error)
 	GetGrants(ns string) (gatewayapi_v1beta1.ReferenceGrantList, error)
+	GetNamespace(name types.NamespacedName) (*v1.Namespace, error)
 }
 
-func isSecretRef(certificateRef gatewayapi.SecretObjectReference) bool {
+func isSecretRef(certificateRef gatewayapi_v1.SecretObjectReference) bool {
 	return certificateRef.Group != nil && *certificateRef.Group == "" &&
 		certificateRef.Kind != nil && *certificateRef.Kind == "Secret"
 }
 
-func ValidGatewayTLS(gateway gatewayapi.Gateway, listenerTLS gatewayapi.GatewayTLSConfig, listenerName string, gwAccessor *status.GatewayStatusUpdate, cb Fetcher) *v1.Secret {
+func ValidGatewayTLS(gateway gatewayapi_v1.Gateway, listenerTLS gatewayapi_v1.GatewayTLSConfig, listenerName string, gwAccessor *status.GatewayStatusUpdate, cb Fetcher) *v1.Secret {
 	if len(listenerTLS.CertificateRefs) != 1 {
 		gwAccessor.AddListenerCondition(
 			listenerName,
-			gatewayapi.ListenerConditionReady,
-			metav1.ConditionFalse,
-			gatewayapi.ListenerReasonInvalid,
+			gatewayapi_v1.ListenerConditionReady,
+			meta_v1.ConditionFalse,
+			gatewayapi_v1.ListenerReasonInvalid,
 			"Listener.TLS.CertificateRefs must contain exactly one entry",
 		)
 		return nil
@@ -63,9 +65,9 @@ func ValidGatewayTLS(gateway gatewayapi.Gateway, listenerTLS gatewayapi.GatewayT
 	if !isSecretRef(certificateRef) {
 		gwAccessor.AddListenerCondition(
 			listenerName,
-			gatewayapi.ListenerConditionResolvedRefs,
-			metav1.ConditionFalse,
-			gatewayapi.ListenerReasonInvalidCertificateRef,
+			gatewayapi_v1.ListenerConditionResolvedRefs,
+			meta_v1.ConditionFalse,
+			gatewayapi_v1.ListenerReasonInvalidCertificateRef,
 			fmt.Sprintf("Spec.VirtualHost.TLS.CertificateRefs %q must contain a reference to a core.Secret", certificateRef.Name),
 		)
 		return nil
@@ -81,7 +83,7 @@ func ValidGatewayTLS(gateway gatewayapi.Gateway, listenerTLS gatewayapi.GatewayT
 		if !validCrossNamespaceRef(
 			grants,
 			crossNamespaceFrom{
-				group:     gatewayapi.GroupName,
+				group:     gatewayapi_v1.GroupName,
 				kind:      KindGateway,
 				namespace: gateway.Namespace,
 			},
@@ -94,9 +96,9 @@ func ValidGatewayTLS(gateway gatewayapi.Gateway, listenerTLS gatewayapi.GatewayT
 		) {
 			gwAccessor.AddListenerCondition(
 				listenerName,
-				gatewayapi.ListenerConditionResolvedRefs,
-				metav1.ConditionFalse,
-				gatewayapi.ListenerReasonRefNotPermitted,
+				gatewayapi_v1.ListenerConditionResolvedRefs,
+				meta_v1.ConditionFalse,
+				gatewayapi_v1.ListenerReasonRefNotPermitted,
 				fmt.Sprintf("Spec.VirtualHost.TLS.CertificateRefs %q namespace must match the Gateway's namespace or be covered by a ReferenceGrant", certificateRef.Name),
 			)
 			return nil
@@ -114,14 +116,65 @@ func ValidGatewayTLS(gateway gatewayapi.Gateway, listenerTLS gatewayapi.GatewayT
 	if err != nil || validTLSSecret(listenerSecret) != nil {
 		gwAccessor.AddListenerCondition(
 			listenerName,
-			gatewayapi.ListenerConditionResolvedRefs,
-			metav1.ConditionFalse,
-			gatewayapi.ListenerReasonInvalidCertificateRef,
+			gatewayapi_v1.ListenerConditionResolvedRefs,
+			meta_v1.ConditionFalse,
+			gatewayapi_v1.ListenerReasonInvalidCertificateRef,
 			fmt.Sprintf("Spec.VirtualHost.TLS.CertificateRefs %q referent is invalid: %s", certificateRef.Name, err),
 		)
 		return nil
 	}
 	return listenerSecret
+}
+
+type listenerInfo struct {
+	listener          gatewayapi_v1.Listener
+	dagListenerName   string
+	allowedKinds      []gatewayapi_v1.Kind
+	namespaceSelector labels.Selector
+	tlsSecret         *Secret
+	ready             bool
+}
+
+func (l *listenerInfo) AllowsKind(kind gatewayapi_v1.Kind) bool {
+	for _, allowedKind := range l.allowedKinds {
+		if allowedKind == kind {
+			return true
+		}
+	}
+
+	return false
+}
+
+// NamespaceMatches returns true if namespaces allows
+// the provided route namespace.
+func NamespaceMatches(gw_ns string, namespaces *gatewayapi_v1.RouteNamespaces, namespaceSelector labels.Selector, routeNamespace string, fetcher Fetcher) bool {
+	// From indicates where Routes will be selected for this Gateway.
+	// Possible values are:
+	//   * All: Routes in all namespaces may be used by this Gateway.
+	//   * Selector: Routes in namespaces selected by the selector may be used by
+	//     this Gateway.
+	//   * Same: Only Routes in the same namespace may be used by this Gateway.
+
+	if namespaces == nil || namespaces.From == nil {
+		return true
+	}
+
+	switch *namespaces.From {
+	case gatewayapi_v1.NamespacesFromAll:
+		return true
+	case gatewayapi_v1.NamespacesFromSame:
+		return gw_ns == routeNamespace
+	case gatewayapi_v1.NamespacesFromSelector:
+		// Look up the route's namespace in the list of cached namespaces.
+		if ns, err := fetcher.GetNamespace(types.NamespacedName{Name: routeNamespace}); err == nil {
+			// Check that the route's namespace is included in the Gateway's
+			// namespace selector.
+			return namespaceSelector.Matches(labels.Set(ns.Labels))
+		}
+		return false
+	}
+
+	return true
 }
 
 type crossNamespaceFrom struct {
@@ -187,7 +240,7 @@ func validCrossNamespaceRef(grants gatewayapi_v1beta1.ReferenceGrantList, from c
 //     invalid and some condition should be added to the route. This shouldn't be
 //     possible because of kubebuilder+admission webhook validation but we're being
 //     defensive here.
-func ComputeHosts(routeHostnames []gatewayapi.Hostname, rawHostname *gatewayapi.Hostname) ([]gatewayapi.Hostname, []error) {
+func ComputeHosts(routeHostnames []gatewayapi_v1.Hostname, rawHostname *gatewayapi_v1.Hostname) ([]gatewayapi_v1.Hostname, []error) {
 	// The listener hostname is assumed to be valid because it's been run
 	// through the `gatewayapi.ValidateListeners` logic, so we don't need
 	// to validate it here.
@@ -202,7 +255,7 @@ func ComputeHosts(routeHostnames []gatewayapi.Hostname, rawHostname *gatewayapi.
 	// No route hostnames specified: use the listener hostname if specified,
 	// or else match all hostnames.
 	if len(routeHostnames) == 0 {
-		return []gatewayapi.Hostname{gatewayapi.Hostname(listenerHostname)}, nil
+		return []gatewayapi_v1.Hostname{gatewayapi_v1.Hostname(listenerHostname)}, nil
 	}
 
 	hostnames := sets.NewString()
@@ -242,13 +295,13 @@ func ComputeHosts(routeHostnames []gatewayapi.Hostname, rawHostname *gatewayapi.
 	}
 
 	if len(hostnames) == 0 {
-		return []gatewayapi.Hostname{}, errs
+		return []gatewayapi_v1.Hostname{}, errs
 	}
 
 	// Flatten the set into a []Hostname to return to the caller.
-	hosts := []gatewayapi.Hostname{}
+	hosts := []gatewayapi_v1.Hostname{}
 	for _, name := range hostnames.List() {
-		hosts = append(hosts, gatewayapi.Hostname(name))
+		hosts = append(hosts, gatewayapi_v1.Hostname(name))
 	}
 
 	return hosts, errs
@@ -288,7 +341,7 @@ func hostnameMatchesWildcardHostname(hostname, wildcardHostname string) bool {
 
 // validateBackendRef verifies that the specified BackendRef is valid.
 // Returns a meta_v1.Condition for the route if any errors are detected.
-func ValidateBackendRef(backendRef gatewayapi.BackendRef, routeKind, routeNamespace string, cb Fetcher) *metav1.Condition {
+func ValidateBackendRef(backendRef gatewayapi_v1.BackendRef, routeKind, routeNamespace string, cb Fetcher) *meta_v1.Condition {
 	return validateBackendObjectRef(backendRef.BackendObjectReference, "Spec.Rules.BackendRef", routeKind, routeNamespace, cb)
 }
 
@@ -297,18 +350,18 @@ func ValidateBackendRef(backendRef gatewayapi.BackendRef, routeKind, routeNamesp
 // As BackendObjectReference is used in multiple fields, the given field is used
 // to build the message in meta_v1.Condition.
 func validateBackendObjectRef(
-	backendObjectRef gatewayapi.BackendObjectReference,
+	backendObjectRef gatewayapi_v1.BackendObjectReference,
 	field string,
 	routeKind string,
 	routeNamespace string,
 	cb Fetcher,
-) *metav1.Condition {
+) *meta_v1.Condition {
 	if !(backendObjectRef.Group == nil || *backendObjectRef.Group == "") {
-		return ptr.To(resolvedRefsFalse(gatewayapi.RouteReasonInvalidKind, fmt.Sprintf("%s.Group must be \"\"", field)))
+		return ptr.To(resolvedRefsFalse(gatewayapi_v1.RouteReasonInvalidKind, fmt.Sprintf("%s.Group must be \"\"", field)))
 	}
 
 	if !(backendObjectRef.Kind != nil && *backendObjectRef.Kind == "Service") {
-		return ptr.To(resolvedRefsFalse(gatewayapi.RouteReasonInvalidKind, fmt.Sprintf("%s.Kind must be 'Service'", field)))
+		return ptr.To(resolvedRefsFalse(gatewayapi_v1.RouteReasonInvalidKind, fmt.Sprintf("%s.Kind must be 'Service'", field)))
 	}
 
 	if backendObjectRef.Name == "" {
@@ -328,7 +381,7 @@ func validateBackendObjectRef(
 		}
 		if !validCrossNamespaceRef(grants,
 			crossNamespaceFrom{
-				group:     string(gatewayapi.GroupName),
+				group:     string(gatewayapi_v1.GroupName),
 				kind:      routeKind,
 				namespace: routeNamespace,
 			},
@@ -339,17 +392,17 @@ func validateBackendObjectRef(
 				name:      string(backendObjectRef.Name),
 			},
 		) {
-			return ptr.To(resolvedRefsFalse(gatewayapi.RouteReasonRefNotPermitted, fmt.Sprintf("%s.Namespace must match the route's namespace or be covered by a ReferenceGrant", field)))
+			return ptr.To(resolvedRefsFalse(gatewayapi_v1.RouteReasonRefNotPermitted, fmt.Sprintf("%s.Namespace must match the route's namespace or be covered by a ReferenceGrant", field)))
 		}
 	}
 
 	return nil
 }
 
-func resolvedRefsFalse(reason gatewayapi.RouteConditionReason, msg string) metav1.Condition {
-	return metav1.Condition{
-		Type:    string(gatewayapi.RouteConditionResolvedRefs),
-		Status:  metav1.ConditionFalse,
+func resolvedRefsFalse(reason gatewayapi_v1.RouteConditionReason, msg string) meta_v1.Condition {
+	return meta_v1.Condition{
+		Type:    string(gatewayapi_v1.RouteConditionResolvedRefs),
+		Status:  meta_v1.ConditionFalse,
 		Reason:  string(reason),
 		Message: msg,
 	}

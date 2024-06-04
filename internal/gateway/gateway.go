@@ -3,6 +3,9 @@ package gateway
 import (
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/labels"
+
+	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapi_v1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -29,13 +32,38 @@ func GatewayEPICUID(gw gatewayapi.Gateway) string {
 // GatewayAllowsHTTPRoute determines whether or not gw allows
 // route. If error is nil then route is allowed, but if it's non-nil
 // then gw has rejected route.
-func GatewayAllowsHTTPRoute(gw gatewayapi.Gateway, route gatewayapi.HTTPRoute) error {
+func GatewayAllowsHTTPRoute(gw gatewayapi.Gateway, route gatewayapi.HTTPRoute, fetcher dag.Fetcher) *meta_v1.Condition {
 	if err := GatewayAllowsKind(gw, (*gatewayapi.Kind)(&route.Kind)); err != nil {
-		return err
+		return &meta_v1.Condition{
+			Type:    string(gatewayapi.RouteConditionAccepted),
+			Reason:  string(gatewayapi.RouteReasonInvalidKind),
+			Status:  meta_v1.ConditionFalse,
+			Message: "Reference Kind not allowed by parent",
+		}
 	}
 
 	if err := GatewayAllowsHostnames(gw, route); err != nil {
-		return err
+		return &meta_v1.Condition{
+			Type:    string(gatewayapi.RouteConditionAccepted),
+			Reason:  string(gatewayapi.RouteReasonNoMatchingListenerHostname),
+			Status:  meta_v1.ConditionFalse,
+			Message: "Reference not allowed by parent",
+		}
+	}
+
+	listenerAllows := false
+	for _, listener := range gw.Spec.Listeners {
+		if dag.NamespaceMatches(gw.Namespace, listener.AllowedRoutes.Namespaces, labels.Everything(), route.Namespace, fetcher) {
+			listenerAllows = true
+		}
+	}
+	if !listenerAllows {
+		return &meta_v1.Condition{
+			Type:    string(gatewayapi.RouteConditionAccepted),
+			Reason:  string(gatewayapi.RouteReasonNotAllowedByListeners),
+			Status:  meta_v1.ConditionFalse,
+			Message: "Reference not allowed by parent",
+		}
 	}
 
 	return nil

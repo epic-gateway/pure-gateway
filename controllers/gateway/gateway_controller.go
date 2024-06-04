@@ -322,6 +322,12 @@ func (r *GatewayReconciler) GetGrants(ns string) (gatewayapi_v1beta1.ReferenceGr
 	return classList, r.List(context.Background(), &classList)
 }
 
+// GetGrants implements the dag.Fetcher GetGrants() method.
+func (r *GatewayReconciler) GetNamespace(name types.NamespacedName) (*v1.Namespace, error) {
+	ns := v1.Namespace{}
+	return &ns, r.Get(context.Background(), name, &ns)
+}
+
 // updateStatus uses Contour's GatewayStatusUpdate to update the
 // Gateway's status.
 func updateStatus(ctx context.Context, cl client.Client, l logr.Logger, gw *gatewayapi.Gateway, gsu *status.GatewayStatusUpdate) error {
