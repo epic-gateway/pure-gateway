@@ -1,8 +1,6 @@
 package gateway
 
 import (
-	"fmt"
-
 	"k8s.io/apimachinery/pkg/labels"
 
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,7 +31,7 @@ func GatewayEPICUID(gw gatewayapi.Gateway) string {
 // route. If error is nil then route is allowed, but if it's non-nil
 // then gw has rejected route.
 func GatewayAllowsHTTPRoute(gw gatewayapi.Gateway, route gatewayapi.HTTPRoute, fetcher dag.Fetcher) *meta_v1.Condition {
-	if err := GatewayAllowsKind(gw, (*gatewayapi.Kind)(&route.Kind)); err != nil {
+	if !GatewayAllowsKind(gw, (*gatewayapi.Kind)(&route.Kind)) {
 		return &meta_v1.Condition{
 			Type:    string(gatewayapi.RouteConditionAccepted),
 			Reason:  string(gatewayapi.RouteReasonInvalidKind),
@@ -42,12 +40,12 @@ func GatewayAllowsHTTPRoute(gw gatewayapi.Gateway, route gatewayapi.HTTPRoute, f
 		}
 	}
 
-	if err := GatewayAllowsHostnames(gw, route); err != nil {
+	if !GatewayAllowsHostnames(gw, route) {
 		return &meta_v1.Condition{
 			Type:    string(gatewayapi.RouteConditionAccepted),
 			Reason:  string(gatewayapi.RouteReasonNoMatchingListenerHostname),
 			Status:  meta_v1.ConditionFalse,
-			Message: "Reference not allowed by parent",
+			Message: "Reference Hostname not allowed by parent",
 		}
 	}
 
@@ -62,7 +60,7 @@ func GatewayAllowsHTTPRoute(gw gatewayapi.Gateway, route gatewayapi.HTTPRoute, f
 			Type:    string(gatewayapi.RouteConditionAccepted),
 			Reason:  string(gatewayapi.RouteReasonNotAllowedByListeners),
 			Status:  meta_v1.ConditionFalse,
-			Message: "Reference not allowed by parent",
+			Message: "Reference Listener not allowed by parent",
 		}
 	}
 
@@ -72,7 +70,7 @@ func GatewayAllowsHTTPRoute(gw gatewayapi.Gateway, route gatewayapi.HTTPRoute, f
 // GatewayAllowsHTTPRoute determines whether or not gw allows
 // route. If error is nil then route is allowed, but if it's non-nil
 // then gw has rejected route.
-func GatewayAllowsTCPRoute(gw gatewayapi.Gateway, route gatewayapi_v1alpha2.TCPRoute) error {
+func GatewayAllowsTCPRoute(gw gatewayapi.Gateway, route gatewayapi_v1alpha2.TCPRoute) bool {
 	return GatewayAllowsKind(gw, (*gatewayapi.Kind)(&route.Kind))
 }
 
@@ -80,43 +78,47 @@ func GatewayAllowsTCPRoute(gw gatewayapi.Gateway, route gatewayapi_v1alpha2.TCPR
 // hostnames. If error is nil then route's hostnames are allowed, but
 // if it's non-nil then there's no intersection between gw's hostnames
 // and route's hostnames.
-func GatewayAllowsHostnames(gw gatewayapi.Gateway, route gatewayapi.HTTPRoute) error {
+func GatewayAllowsHostnames(gw gatewayapi.Gateway, route gatewayapi.HTTPRoute) bool {
 	for _, listener := range gw.Spec.Listeners {
 		hosts, errs := dag.ComputeHosts(route.Spec.Hostnames, listener.Hostname)
 
 		// If any of the Route's hostnames are invalid then the Route
 		// can't be used
 		if errs != nil {
-			return errs[0]
+			return false
 		}
 
 		// If there's an intersection between the Route's hostnames and
 		// the Listener's hostnames then we can use the Route
 		if len(hosts) != 0 {
-			return nil
+			return true
 		}
 	}
 
-	return fmt.Errorf("No intersecting hostnames between gateway %s and route %s", gw.Name, route.Name)
+	return false
 }
 
 // GatewayAllowsKind checks whether gw allows attachment by
 // routeKind. If error is nil then attachment is allowed but if not
 // then it isn't.
-func GatewayAllowsKind(gw gatewayapi.Gateway, routeKind *gatewayapi.Kind) error {
+func GatewayAllowsKind(gw gatewayapi.Gateway, routeKind *gatewayapi.Kind) bool {
 	for _, listener := range gw.Spec.Listeners {
-		if err := allowsKind(listener.AllowedRoutes, routeKind); err != nil {
-			return err
+		if kindsIntersect(listener.AllowedRoutes, routeKind) {
+			return true
 		}
 	}
-	return nil
+	return false
 }
 
-func allowsKind(allow *gatewayapi.AllowedRoutes, routeKind *gatewayapi.Kind) error {
-	for _, gk := range allow.Kinds {
-		if &gk.Kind != routeKind {
-			return fmt.Errorf("Kind mismatch: %s vs %s", gk.Kind, *routeKind)
+func kindsIntersect(allowedKinds *gatewayapi.AllowedRoutes, routeKind *gatewayapi.Kind) bool {
+	allowed := allowedKinds.Kinds
+	if len(allowedKinds.Kinds) == 0 {
+		allowed = []gatewayapi.RouteGroupKind{{Kind: "HTTPRoute"}}
+	}
+	for _, gk := range allowed {
+		if gk.Kind == *routeKind {
+			return true
 		}
 	}
-	return nil
+	return false
 }

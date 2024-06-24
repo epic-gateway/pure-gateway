@@ -119,7 +119,7 @@ func (r *TCPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 
 		// Make sure that the Gateway will allow this Route to attach
-		if err := gateway.GatewayAllowsTCPRoute(gw, route); err != nil {
+		if !gateway.GatewayAllowsTCPRoute(gw, route) {
 			// Update the Route's status
 			if err := markRouteRejected(ctx, r.Client, l, client.ObjectKey{Namespace: route.GetNamespace(), Name: route.GetName()}); err != nil {
 				return controllers.Done, err
