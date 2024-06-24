@@ -116,16 +116,6 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return controllers.Done, err
 	}
 
-	// See if we've already announced this resource.
-	link, announced := gw.Annotations[epicgwv1.EPICLinkAnnotation]
-	if announced {
-		l.Info("Previously announced", "link", link)
-		if err := freshenStatus(ctx, r.Client, l, client.ObjectKey{Namespace: gw.GetNamespace(), Name: gw.GetName()}); err != nil {
-			return controllers.Done, err
-		}
-		return controllers.Done, nil
-	}
-
 	l.V(1).Info("Reconciling")
 
 	gsu := status.GatewayStatusUpdate{
@@ -137,33 +127,48 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Indicate that we're working on this Gateway
-	gsu.AddCondition(status.ConditionProgrammedGateway, metav1.ConditionTrue, status.ReasonAcceptedGateway, "Programmed")
+	gsu.AddCondition(status.ConditionProgrammedGateway, metav1.ConditionTrue, status.ReasonProgrammedGateway, "Programmed")
+	gsu.AddCondition(status.ConditionAcceptedGateway, metav1.ConditionTrue, status.ReasonAcceptedGateway, "Processing")
 
-	// Set the listener supportedKinds
+	// Set the listener supportedKinds and update the attached routes count
+	children := []gatewayapi.HTTPRoute{}
+	if children, err = gatewayChildren(ctx, r.Client, l, &gw); err != nil {
+		return controllers.Done, err
+	}
 	for _, listener := range gw.Spec.Listeners {
 		setSupportedKinds(l, string(listener.Name), listener.AllowedRoutes.Kinds, &gsu)
+		setAttachedRoutes(l, string(listener.Name), children, &gsu)
 	}
 
 	// Validate TLS configuration (if present)
 	tlsOK := true
 	for _, listener := range gw.Spec.Listeners {
+
+		// Assume everything's OK.
+		gsu.AddListenerCondition(string(listener.Name), gatewayapi.ListenerConditionAccepted, metav1.ConditionTrue, gatewayapi.ListenerReasonAccepted, "Accepted")
+		gsu.AddListenerCondition(string(listener.Name), gatewayapi.ListenerConditionProgrammed, metav1.ConditionTrue, gatewayapi.ListenerReasonProgrammed, "Programmed")
+
 		if listener.TLS != nil {
 			// If we have a TLS config then we need to validate it.
 			if dag.ValidGatewayTLS(gw, *listener.TLS, string(listener.Name), &gsu, r) == nil {
 				tlsOK = false
 				l.V(1).Info("TLS Error", "listener", listener.Name)
+
+				// There's a TLS config problem so override the conditions we
+				// set a few lines earlier.
+				gsu.AddListenerCondition(string(listener.Name), gatewayapi.ListenerConditionAccepted, metav1.ConditionFalse, gatewayapi.ListenerReasonAccepted, "TLS config problem")
+				gsu.AddListenerCondition(string(listener.Name), gatewayapi.ListenerConditionProgrammed, metav1.ConditionFalse, gatewayapi.ListenerReasonProgrammed, "TLS config problem")
 			} else {
 				l.V(1).Info("TLS OK", "listener", listener.Name)
 			}
 		}
-		gsu.AddListenerCondition(string(listener.Name), gatewayapi.ListenerConditionAccepted, metav1.ConditionTrue, gatewayapi.ListenerReasonAccepted, "Accepted")
-		gsu.AddListenerCondition(string(listener.Name), gatewayapi.ListenerConditionProgrammed, metav1.ConditionTrue, gatewayapi.ListenerReasonProgrammed, "Programmed")
 	}
 
 	// If there's something wrong with the TLS config then mark the
 	// gateway and don't announce.
 	if !tlsOK {
-		gsu.AddCondition(status.ConditionAcceptedGateway, metav1.ConditionTrue, status.ReasonValidGateway, "Not announced to EPIC")
+		gsu.AddCondition(status.ConditionAcceptedGateway, metav1.ConditionFalse, status.ReasonAcceptedGateway, "TLS config problem")
+		gsu.AddCondition(status.ConditionProgrammedGateway, metav1.ConditionFalse, status.ReasonProgrammedGateway, "TLS config problem")
 		if err := updateStatus(ctx, r.Client, l, &gw, &gsu); err != nil {
 			return controllers.Done, err
 		}
@@ -174,6 +179,16 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	group, err := epic.GetGroup()
 	if err != nil {
 		return controllers.Done, err
+	}
+
+	// See if we've already announced this resource.
+	link, announced := gw.Annotations[epicgwv1.EPICLinkAnnotation]
+	if announced {
+		l.Info("Previously announced", "link", link)
+		if err := updateStatus(ctx, r.Client, l, &gw, &gsu); err != nil {
+			return controllers.Done, err
+		}
+		return controllers.Done, nil
 	}
 
 	// Announce the Gateway
@@ -207,10 +222,6 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// it. The new GW has a different UID so the EPIC GWRoutes won't
 	// link to the new GWGateway. We need to nudge the children so they
 	// send an update to EPIC that links to the new GWRoute.
-	children := []gatewayapi.HTTPRoute{}
-	if children, err = gatewayChildren(ctx, r.Client, l, &gw); err != nil {
-		return controllers.Done, err
-	}
 	l.Info("Nudging children", "childCount", len(children))
 	for _, route := range children {
 		if err = gateway.Nudge(ctx, r.Client, l, &route); err != nil {
@@ -427,18 +438,16 @@ func gatewayChildren(ctx context.Context, cl client.Client, l logr.Logger, gw *g
 	if err = cl.List(ctx, &routeList, &client.ListOptions{Namespace: ""}); err != nil {
 		return
 	}
-	l.Info("Child candidates", "count", len(routeList.Items))
-
 	gwName := types.NamespacedName{Namespace: gw.Namespace, Name: gw.Name}
 	for _, route := range routeList.Items {
 		for _, ref := range route.Spec.ParentRefs {
-			l.Info("*** Comparing", "gw", gwName, "ref", ref)
-
 			if isRefToGateway(ref, gwName) {
 				routes = append(routes, route)
 			}
 		}
 	}
+
+	l.V(1).Info("Children", "count", len(routes))
 
 	return
 }
@@ -452,7 +461,7 @@ func isRefToGateway(ref gatewayapi.ParentReference, gateway types.NamespacedName
 		return false
 	}
 
-	if ref.Kind != nil && *ref.Kind != "Gateway" {
+	if ref.Kind != nil && *ref.Kind != dag.KindGateway {
 		return false
 	}
 
@@ -502,5 +511,10 @@ func setSupportedKinds(l logr.Logger, name string, rgks []gatewayapi.RouteGroupK
 	}
 
 	gsu.SetListenerSupportedKinds(name, kinds)
+	return
+}
+
+func setAttachedRoutes(l logr.Logger, name string, children []gatewayapi.HTTPRoute, gsu *status.GatewayStatusUpdate) {
+	gsu.SetListenerAttachedRoutes(name, len(children))
 	return
 }

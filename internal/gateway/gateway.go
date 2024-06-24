@@ -28,8 +28,8 @@ func GatewayEPICUID(gw gatewayapi.Gateway) string {
 }
 
 // GatewayAllowsHTTPRoute determines whether or not gw allows
-// route. If error is nil then route is allowed, but if it's non-nil
-// then gw has rejected route.
+// route. If Condition is nil then route is allowed, but if it's
+// non-nil then gw has rejected route.
 func GatewayAllowsHTTPRoute(gw gatewayapi.Gateway, route gatewayapi.HTTPRoute, fetcher dag.Fetcher) *meta_v1.Condition {
 	if !GatewayAllowsKind(gw, (*gatewayapi.Kind)(&route.Kind)) {
 		return &meta_v1.Condition{

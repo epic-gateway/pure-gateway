@@ -29,6 +29,7 @@ type GatewayReasonType string
 const ReasonAcceptedGateway = "Accepted"
 const ReasonValidGateway = "Valid"
 const ReasonInvalidGateway = "Invalid"
+const ReasonProgrammedGateway = "Programmed"
 
 const MessageValidGateway = "Valid Gateway"
 

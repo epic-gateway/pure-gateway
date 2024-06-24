@@ -18,6 +18,7 @@ import (
 	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 
 	"epic-gateway.org/puregw/controllers"
+	"epic-gateway.org/puregw/internal/contour/dag"
 	"epic-gateway.org/puregw/internal/contour/status"
 )
 
@@ -142,7 +143,7 @@ func markAcceptance(ctx context.Context, cl client.Client, l logr.Logger, gc *ga
 		}
 
 		gc.Status.SupportedFeatures = []gatewayapi.SupportedFeature{
-			gatewayapi.SupportedFeature("Gateway"),
+			gatewayapi.SupportedFeature(string(dag.KindGateway)),
 			gatewayapi.SupportedFeature("ReferenceGrant"),
 			gatewayapi.SupportedFeature("HTTPRoute"),
 		}
