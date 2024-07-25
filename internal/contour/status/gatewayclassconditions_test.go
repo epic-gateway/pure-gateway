@@ -18,67 +18,107 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	utilclock "k8s.io/utils/clock"
-	utilclock_testing "k8s.io/utils/clock/testing"
-	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
+	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	gatewayapi_v1 "sigs.k8s.io/gateway-api/apis/v1"
 )
+
+func TestComputeGatewayClassAcceptedCondition(t *testing.T) {
+	testCases := []struct {
+		name     string
+		accepted bool
+		expect   meta_v1.Condition
+	}{
+		{
+			name:     "accepted gatewayclass",
+			accepted: true,
+			expect: meta_v1.Condition{
+				Type:   string(gatewayapi_v1.GatewayClassConditionStatusAccepted),
+				Status: meta_v1.ConditionTrue,
+				Reason: string(gatewayapi_v1.GatewayClassReasonAccepted),
+			},
+		},
+		{
+			name:     "not accepted gatewayclass",
+			accepted: false,
+			expect: meta_v1.Condition{
+				Type:   string(gatewayapi_v1.GatewayClassConditionStatusAccepted),
+				Status: meta_v1.ConditionFalse,
+				Reason: string(ReasonOlderGatewayClassExists),
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		gc := &gatewayapi_v1.GatewayClass{
+			ObjectMeta: meta_v1.ObjectMeta{
+				Generation: 7,
+			},
+		}
+
+		got := computeGatewayClassAcceptedCondition(gc, tc.accepted)
+
+		assert.Equal(t, tc.expect.Type, got.Type)
+		assert.Equal(t, tc.expect.Status, got.Status)
+		assert.Equal(t, tc.expect.Reason, got.Reason)
+		assert.Equal(t, gc.Generation, got.ObservedGeneration)
+	}
+}
 
 func TestConditionChanged(t *testing.T) {
 	testCases := []struct {
 		name     string
 		expected bool
-		a, b     metav1.Condition
+		a, b     meta_v1.Condition
 	}{
 		{
 			name:     "nil and non-nil current are equal",
 			expected: false,
-			a:        metav1.Condition{},
+			a:        meta_v1.Condition{},
 		},
 		{
 			name:     "empty slices should be equal",
 			expected: false,
-			a:        metav1.Condition{},
-			b:        metav1.Condition{},
+			a:        meta_v1.Condition{},
+			b:        meta_v1.Condition{},
 		},
 		{
 			name:     "condition LastTransitionTime should be ignored",
 			expected: false,
-			a: metav1.Condition{
-				Type:               string(gatewayapi.GatewayClassConditionStatusAccepted),
-				Status:             metav1.ConditionTrue,
-				LastTransitionTime: metav1.Unix(0, 0),
+			a: meta_v1.Condition{
+				Type:               string(gatewayapi_v1.GatewayClassConditionStatusAccepted),
+				Status:             meta_v1.ConditionTrue,
+				LastTransitionTime: meta_v1.Unix(0, 0),
 			},
-			b: metav1.Condition{
-				Type:               string(gatewayapi.GatewayClassConditionStatusAccepted),
-				Status:             metav1.ConditionTrue,
-				LastTransitionTime: metav1.Unix(1, 0),
+			b: meta_v1.Condition{
+				Type:               string(gatewayapi_v1.GatewayClassConditionStatusAccepted),
+				Status:             meta_v1.ConditionTrue,
+				LastTransitionTime: meta_v1.Unix(1, 0),
 			},
 		},
 		{
 			name:     "check condition reason differs",
 			expected: true,
-			a: metav1.Condition{
-				Type:   string(gatewayapi.GatewayConditionReady),
-				Status: metav1.ConditionFalse,
+			a: meta_v1.Condition{
+				Type:   string(gatewayapi_v1.GatewayConditionProgrammed),
+				Status: meta_v1.ConditionFalse,
 				Reason: "foo",
 			},
-			b: metav1.Condition{
-				Type:   string(gatewayapi.GatewayConditionReady),
-				Status: metav1.ConditionFalse,
+			b: meta_v1.Condition{
+				Type:   string(gatewayapi_v1.GatewayConditionProgrammed),
+				Status: meta_v1.ConditionFalse,
 				Reason: "bar",
 			},
 		},
 		{
 			name:     "condition status differs",
 			expected: true,
-			a: metav1.Condition{
-				Type:   string(gatewayapi.GatewayClassConditionStatusAccepted),
-				Status: metav1.ConditionTrue,
+			a: meta_v1.Condition{
+				Type:   string(gatewayapi_v1.GatewayClassConditionStatusAccepted),
+				Status: meta_v1.ConditionTrue,
 			},
-			b: metav1.Condition{
-				Type:   string(gatewayapi.GatewayClassConditionStatusAccepted),
-				Status: metav1.ConditionFalse,
+			b: meta_v1.Condition{
+				Type:   string(gatewayapi_v1.GatewayClassConditionStatusAccepted),
+				Status: meta_v1.ConditionFalse,
 			},
 		},
 	}
@@ -91,70 +131,66 @@ func TestConditionChanged(t *testing.T) {
 }
 
 func TestMergeConditions(t *testing.T) {
-	// Inject a fake clock and don't forget to reset it
-	fakeClock := utilclock_testing.NewFakeClock(time.Time{})
-	clock = fakeClock
-	defer func() {
-		clock = utilclock.RealClock{}
-	}()
-
-	start := fakeClock.Now()
-	middle := start.Add(1 * time.Minute)
+	start := time.Now()
 	later := start.Add(2 * time.Minute)
 
 	testCases := []struct {
 		name     string
-		current  []metav1.Condition
-		updates  []metav1.Condition
-		expected []metav1.Condition
+		current  []meta_v1.Condition
+		updates  []meta_v1.Condition
+		expected []meta_v1.Condition
 	}{
 		{
 			name: "status updated",
-			current: []metav1.Condition{
+			current: []meta_v1.Condition{
 				newCondition("available", "false", "Reason", "Message", start),
 			},
-			updates: []metav1.Condition{
-				newCondition("available", "true", "Reason", "Message", middle),
+			updates: []meta_v1.Condition{
+				newCondition("available", "true", "Reason", "Message", later),
 			},
-			expected: []metav1.Condition{
+			expected: []meta_v1.Condition{
 				newCondition("available", "true", "Reason", "Message", later),
 			},
 		},
 		{
 			name: "reason updated",
-			current: []metav1.Condition{
+			current: []meta_v1.Condition{
 				newCondition("available", "false", "Reason", "Message", start),
 			},
-			updates: []metav1.Condition{
-				newCondition("available", "false", "New Reason", "Message", middle),
+			updates: []meta_v1.Condition{
+				newCondition("available", "false", "New Reason", "Message", later),
 			},
-			expected: []metav1.Condition{
+			expected: []meta_v1.Condition{
 				newCondition("available", "false", "New Reason", "Message", start),
 			},
 		},
 		{
 			name: "message updated",
-			current: []metav1.Condition{
+			current: []meta_v1.Condition{
 				newCondition("available", "false", "Reason", "Message", start),
 			},
-			updates: []metav1.Condition{
-				newCondition("available", "false", "Reason", "New Message", middle),
+			updates: []meta_v1.Condition{
+				newCondition("available", "false", "Reason", "New Message", later),
 			},
-			expected: []metav1.Condition{
+			expected: []meta_v1.Condition{
 				newCondition("available", "false", "Reason", "New Message", start),
+			},
+		},
+		{
+			name:    "new status",
+			current: []meta_v1.Condition{},
+			updates: []meta_v1.Condition{
+				newCondition("available", "false", "Reason", "New Message", later),
+			},
+			expected: []meta_v1.Condition{
+				newCondition("available", "false", "Reason", "New Message", later),
 			},
 		},
 	}
 
-	// Simulate the passage of time between original condition creation
-	// and update processing
-	fakeClock.SetTime(later)
-
 	for _, tc := range testCases {
-		got := MergeConditions(tc.current, tc.updates...)
-		if conditionChanged(tc.expected[0], got[0]) {
-			assert.Equal(t, tc.expected, got, tc.name)
-		}
+		got := mergeConditions(tc.current, tc.updates...)
+		assert.Equal(t, tc.expected, got, tc.name)
 	}
 }
 
@@ -162,7 +198,7 @@ func TestConditionsEqual(t *testing.T) {
 	testCases := []struct {
 		name     string
 		expected bool
-		a, b     []metav1.Condition
+		a, b     []meta_v1.Condition
 	}{
 		{
 			name:     "zero-valued status should be equal",
@@ -171,78 +207,78 @@ func TestConditionsEqual(t *testing.T) {
 		{
 			name:     "nil and non-nil slices should be equal",
 			expected: true,
-			a:        []metav1.Condition{},
+			a:        []meta_v1.Condition{},
 		},
 		{
 			name:     "empty slices should be equal",
 			expected: true,
-			a:        []metav1.Condition{},
-			b:        []metav1.Condition{},
+			a:        []meta_v1.Condition{},
+			b:        []meta_v1.Condition{},
 		},
 		{
 			name:     "condition LastTransitionTime should not be ignored",
 			expected: false,
-			a: []metav1.Condition{
+			a: []meta_v1.Condition{
 				{
 					Type:               "foo",
-					Status:             metav1.ConditionTrue,
-					LastTransitionTime: metav1.Unix(0, 0),
+					Status:             meta_v1.ConditionTrue,
+					LastTransitionTime: meta_v1.Unix(0, 0),
 				},
 			},
-			b: []metav1.Condition{
+			b: []meta_v1.Condition{
 				{
 					Type:               "foo",
-					Status:             metav1.ConditionTrue,
-					LastTransitionTime: metav1.Unix(1, 0),
+					Status:             meta_v1.ConditionTrue,
+					LastTransitionTime: meta_v1.Unix(1, 0),
 				},
 			},
 		},
 		{
 			name:     "check condition types differ",
 			expected: false,
-			a: []metav1.Condition{
+			a: []meta_v1.Condition{
 				{
 					Type:   "foo",
-					Status: metav1.ConditionTrue,
+					Status: meta_v1.ConditionTrue,
 				},
 			},
-			b: []metav1.Condition{
+			b: []meta_v1.Condition{
 				{
 					Type:   "bar",
-					Status: metav1.ConditionTrue,
+					Status: meta_v1.ConditionTrue,
 				},
 			},
 		},
 		{
 			name:     "check condition status differs",
 			expected: false,
-			a: []metav1.Condition{
+			a: []meta_v1.Condition{
 				{
 					Type:   "foo",
-					Status: metav1.ConditionTrue,
+					Status: meta_v1.ConditionTrue,
 				},
 			},
-			b: []metav1.Condition{
+			b: []meta_v1.Condition{
 				{
 					Type:   "foo",
-					Status: metav1.ConditionFalse,
+					Status: meta_v1.ConditionFalse,
 				},
 			},
 		},
 		{
 			name:     "check condition reasons differ",
 			expected: false,
-			a: []metav1.Condition{
+			a: []meta_v1.Condition{
 				{
 					Type:   "foo",
-					Status: metav1.ConditionFalse,
+					Status: meta_v1.ConditionFalse,
 					Reason: "foo",
 				},
 			},
-			b: []metav1.Condition{
+			b: []meta_v1.Condition{
 				{
 					Type:   "foo",
-					Status: metav1.ConditionFalse,
+					Status: meta_v1.ConditionFalse,
 					Reason: "bar",
 				},
 			},
@@ -250,12 +286,12 @@ func TestConditionsEqual(t *testing.T) {
 		{
 			name:     "check duplicate of a single condition type",
 			expected: false,
-			a: []metav1.Condition{
+			a: []meta_v1.Condition{
 				{
 					Type: "foo",
 				},
 			},
-			b: []metav1.Condition{
+			b: []meta_v1.Condition{
 				{
 					Type: "foo",
 				},
@@ -267,40 +303,40 @@ func TestConditionsEqual(t *testing.T) {
 		{
 			name:     "check new condition added",
 			expected: false,
-			a: []metav1.Condition{
+			a: []meta_v1.Condition{
 				{
 					Type:   "foo",
-					Status: metav1.ConditionTrue,
+					Status: meta_v1.ConditionTrue,
 				},
 			},
-			b: []metav1.Condition{
+			b: []meta_v1.Condition{
 				{
 					Type:   "foo",
-					Status: metav1.ConditionTrue,
+					Status: meta_v1.ConditionTrue,
 				},
 				{
 					Type:   "bar",
-					Status: metav1.ConditionTrue,
+					Status: meta_v1.ConditionTrue,
 				},
 			},
 		},
 		{
 			name:     "check condition removed",
 			expected: false,
-			a: []metav1.Condition{
+			a: []meta_v1.Condition{
 				{
 					Type:   "foo",
-					Status: metav1.ConditionTrue,
+					Status: meta_v1.ConditionTrue,
 				},
 				{
 					Type:   "bar",
-					Status: metav1.ConditionTrue,
+					Status: meta_v1.ConditionTrue,
 				},
 			},
-			b: []metav1.Condition{
+			b: []meta_v1.Condition{
 				{
 					Type:   "foo",
-					Status: metav1.ConditionTrue,
+					Status: meta_v1.ConditionTrue,
 				},
 			},
 		},
