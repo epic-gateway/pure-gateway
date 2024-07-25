@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -25,7 +26,6 @@ import (
 	epicgwv1 "epic-gateway.org/puregw/apis/puregw/v1"
 	"epic-gateway.org/puregw/controllers"
 	"epic-gateway.org/puregw/internal/contour/dag"
-	contour_gatewayapi "epic-gateway.org/puregw/internal/contour/gatewayapi"
 	"epic-gateway.org/puregw/internal/contour/status"
 	"epic-gateway.org/puregw/internal/gateway"
 )
@@ -380,12 +380,12 @@ func markAddresses(ctx context.Context, cl client.Client, l logr.Logger, gw *gat
 		// Add the IP address to GW.Status so the user can find out what
 		// it is.
 		gw.Status.Addresses = []gatewayapi.GatewayStatusAddress{{
-			Type:  contour_gatewayapi.AddressTypePtr(gatewayapi.IPAddressType),
+			Type:  ptr.To(gatewayapi.IPAddressType),
 			Value: publicIP,
 		}}
 		if publicHostname != "" {
 			gw.Status.Addresses = append(gw.Status.Addresses, gatewayapi.GatewayStatusAddress{
-				Type:  contour_gatewayapi.AddressTypePtr(gatewayapi.HostnameAddressType),
+				Type:  ptr.To(gatewayapi.HostnameAddressType),
 				Value: publicHostname,
 			})
 		}
