@@ -127,8 +127,8 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Indicate that we're working on this Gateway
-	gsu.AddCondition(status.ConditionProgrammedGateway, metav1.ConditionTrue, status.ReasonProgrammedGateway, "Programmed")
-	gsu.AddCondition(status.ConditionAcceptedGateway, metav1.ConditionTrue, status.ReasonAcceptedGateway, "Processing")
+	gsu.AddCondition(gatewayapi.GatewayConditionProgrammed, metav1.ConditionTrue, gatewayapi.GatewayReasonProgrammed, "Programmed")
+	gsu.AddCondition(gatewayapi.GatewayConditionAccepted, metav1.ConditionTrue, gatewayapi.GatewayReasonAccepted, "Processing")
 
 	// Set the listener supportedKinds and update the attached routes count
 	children := []gatewayapi.HTTPRoute{}
@@ -167,8 +167,8 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// If there's something wrong with the TLS config then mark the
 	// gateway and don't announce.
 	if !tlsOK {
-		gsu.AddCondition(status.ConditionAcceptedGateway, metav1.ConditionFalse, status.ReasonAcceptedGateway, "TLS config problem")
-		gsu.AddCondition(status.ConditionProgrammedGateway, metav1.ConditionFalse, status.ReasonProgrammedGateway, "TLS config problem")
+		gsu.AddCondition(gatewayapi.GatewayConditionAccepted, metav1.ConditionFalse, gatewayapi.GatewayReasonAccepted, "TLS config problem")
+		gsu.AddCondition(gatewayapi.GatewayConditionProgrammed, metav1.ConditionFalse, gatewayapi.GatewayReasonProgrammed, "TLS config problem")
 		if err := updateStatus(ctx, r.Client, l, &gw, &gsu); err != nil {
 			return controllers.Done, err
 		}
@@ -195,7 +195,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	response, err := epic.AnnounceGateway(group.Links["create-proxy"], gw)
 	if err != nil {
 		// Tell the user that something has gone wrong
-		gsu.AddCondition(status.ConditionAcceptedGateway, metav1.ConditionFalse, status.ReasonValidGateway, err.Error())
+		gsu.AddCondition(gatewayapi.GatewayConditionAccepted, metav1.ConditionFalse, gatewayapi.GatewayReasonAccepted, err.Error())
 		updateStatus(ctx, r.Client, l, &gw, &gsu)
 		return controllers.Done, err
 	}
@@ -212,7 +212,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Tell the user that we're working on bringing up the Gateway.
-	gsu.AddCondition(status.ConditionAcceptedGateway, metav1.ConditionTrue, status.ReasonAcceptedGateway, "Announced to EPIC")
+	gsu.AddCondition(gatewayapi.GatewayConditionAccepted, metav1.ConditionTrue, gatewayapi.GatewayReasonAccepted, "Announced to EPIC")
 	if err := updateStatus(ctx, r.Client, l, &gw, &gsu); err != nil {
 		return controllers.Done, err
 	}
