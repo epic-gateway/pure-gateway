@@ -101,8 +101,8 @@ func (r *RouteParentStatusUpdate) AddCondition(conditionType gatewayapi_v1.Route
 		}
 	}
 
-	if idx > -1 {
-		message = rps.Conditions[idx].Message + ", " + message
+	if idx > -1 && rps.Conditions[idx].Status == "False" {
+		return rps.Conditions[idx]
 	}
 
 	cond := meta_v1.Condition{
