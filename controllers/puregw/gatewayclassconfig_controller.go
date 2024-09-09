@@ -121,7 +121,7 @@ func markAcceptance(ctx context.Context, cl client.Client, l logr.Logger, gwcc *
 			return err
 		}
 
-		gwcc.Status.Conditions = status.MergeConditions(gwcc.Status.Conditions, status.RefreshCondition(&gwcc.ObjectMeta, accepted))
+		gwcc.Status.Conditions = status.MergeConditions(gwcc.Status.Conditions, *gateway.RefreshCondition(&gwcc.ObjectMeta, &accepted))
 
 		// Try to update
 		return cl.Status().Update(ctx, gwcc)

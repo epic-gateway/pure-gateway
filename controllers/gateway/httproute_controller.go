@@ -65,10 +65,10 @@ func (r *HTTPRouteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := log.FromContext(ctx)
+	l.V(1).Info("Reconciling")
+
 	var (
-		missingService bool                                               = false
-		missingParent  bool                                               = false
-		conditions     map[gatewayapi.RouteConditionType]metav1.Condition = map[gatewayapi.RouteConditionType]metav1.Condition{}
+		config *epicgwv1.GatewayClassConfig
 	)
 
 	// Get the HTTPRoute that triggered this request
@@ -104,44 +104,83 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return controllers.Done, nil
 	}
 
-	// Try to get the Gateways to which we refer, and keep trying until
-	// we can. If any of the parents is not our GatewayClass then we
-	// won't handle this route.
-	var config *epicgwv1.GatewayClassConfig
-	for _, parent := range route.Spec.ParentRefs {
+	// The resource is not being deleted, and it's our GWClass, so add
+	// our finalizer.
+	if err := controllers.AddFinalizer(ctx, r.Client, &route, controllers.FinalizerName); err != nil {
+		return controllers.Done, err
+	}
+
+	// We'll accumulate our Route Status in this RSU and apply it when
+	// we're done.
+	rsu := status.RouteStatusUpdate{
+		FullName:          req.NamespacedName,
+		GatewayController: controllers.GatewayController,
+		TransitionTime:    metav1.NewTime(time.Now()),
+		Generation:        route.Generation,
+	}
+	for _, rps := range route.Status.Parents {
+		rsu.RouteParentStatuses = append(rsu.RouteParentStatuses, &rps)
+	}
+
+	// Make a copy of the Route that we'll send to the mothership.
+	announcedRoute := route.DeepCopy()
+
+	// Try to get the Gateways to which we refer.
+	for i, parent := range route.Spec.ParentRefs {
+		parentUpdate := rsu.StatusUpdateFor(parent)
+		parentUpdate.AddCondition(gatewayapi.RouteConditionAccepted, metav1.ConditionTrue, gatewayapi.RouteReasonAccepted, "Accepted by PureGW")
+
 		gw := gatewayapi.Gateway{}
-		if err := parentGW(ctx, r.Client, route.Namespace, parent, &gw); err != nil {
-			l.Info("Can't get parent, will retry", "parentRef", parent)
-			return controllers.TryAgain, nil
-		}
+		if parentConfig, err := parentGW(ctx, r.Client, route.Namespace, parent, &gw); err != nil {
+			l.Info("Can't get parent, will retry", "parentRef", parent, "message", err)
+		} else {
+			// Make sure that the Gateway will allow this Route to attach
+			if cond := gateway.GatewayAllowsHTTPRoute(parent, gw, route, r); cond != nil {
+				l.V(1).Info("Gateway rejected parentRef", "gw", gw.Name, "parent", parent)
+				parentUpdate.AddCondition(gatewayapi.RouteConditionType(cond.Type), cond.Status, gatewayapi.RouteConditionReason(cond.Reason), cond.Message)
+				parentUpdate.AddCondition(gatewayapi.RouteConditionResolvedRefs, metav1.ConditionTrue, gatewayapi.RouteReasonResolvedRefs, "Reference not allowed by parent")
 
-		// See if we're the chosen controller
-		var err error
-		config, err = getEPICConfig(ctx, r.Client, string(gw.Spec.GatewayClassName))
-		if err != nil {
-			return controllers.Done, err
-		}
-		if config == nil {
-			l.V(1).Info("Not our ControllerName, will ignore", "parentRef", parent, "controller", gw.Spec.GatewayClassName)
-			return controllers.Done, nil
-		}
+				// Tell the mothership that this parent is invalid.
+				announcedRoute.Spec.ParentRefs[i].Name = "INVALID"
+			} else {
 
-		// Make sure that the Gateway will allow this Route to attach
-		if cond := gateway.GatewayAllowsHTTPRoute(gw, route, r); cond != nil {
-			l.V(1).Info("Gateway rejected HTTPRoute", "gw", gw.Name)
+				// Add conditions for all of the rules relative to this parent
+				r.addRuleConditions(l, ctx, parentUpdate, route, announcedRoute)
 
-			// Update the Route's status
-			var notAllowed = map[gatewayapi.RouteConditionType]metav1.Condition{
-				gatewayapi.RouteConditionAccepted: *cond,
-				gatewayapi.RouteConditionResolvedRefs: {
-					Type:    string(gatewayapi.RouteConditionResolvedRefs),
-					Reason:  string(gatewayapi.RouteReasonResolvedRefs),
-					Status:  metav1.ConditionTrue,
-					Message: "Reference not allowed by parent",
-				},
+				// Munge the ParentRefs so they refer to the Gateways' UIDs, not
+				// their names. We use UIDs on the EPIC side because they're unique.
+				announcedRoute.Spec.ParentRefs[i].Name = gatewayapi.ObjectName(gateway.GatewayEPICUID(gw))
+
+				// FIXME: this assumes that we're only working with one
+				// upstream EPIC cluster, but in theory one parent GW could be
+				// on one cluster and a different parent GW could be on
+				// another cluster.
+				config = parentConfig
+
+				// // FIXME: Not sure what GatewayRef is for: Routes have no
+				// // single "Gateway", but they have 0 or more parent references
+				// // that can be to Gateways. If I don't set this, then each
+				// // time I call Mutate() I get another instance of the parent
+				// // reference in the Route Status.
+				// rsu.GatewayRef = types.NamespacedName{Namespace: gw.Namespace, Name: gw.Name}
 			}
-			return controllers.Done, markRouteConditions(ctx, r.Client, l, client.ObjectKey{Namespace: route.GetNamespace(), Name: route.GetName()}, notAllowed)
 		}
+
+		parentUpdate.AddCondition(gatewayapi.RouteConditionResolvedRefs, metav1.ConditionTrue, gatewayapi.RouteReasonResolvedRefs, "References resolved")
+	}
+
+	if err := markRouteConditions(ctx, r.Client, l, client.ObjectKey{Namespace: route.GetNamespace(), Name: route.GetName()}, rsu); err != nil {
+		return controllers.Done, err
+	}
+
+	// The HTTPRoute object doesn't have enough info to connect to EPIC
+	// since it doesn't reference a ConfigClass. We kludge around this
+	// by "borrowing" one of the parents' ConfigClasses, but if there
+	// are no valid parents, then we can't connect to EPIC so we can't
+	// announce.
+	if config == nil {
+		l.Info("No valid parents, cannot announce")
+		return controllers.Done, nil
 	}
 
 	epic, err := controllers.ConnectToEPIC(ctx, r.Client, &config.Namespace, config.Name)
@@ -149,46 +188,77 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return controllers.Done, err
 	}
 
-	l.V(1).Info("Reconciling")
-
 	account, err := epic.GetAccount()
 	if err != nil {
 		return controllers.Done, err
 	}
 
-	// The resource is not being deleted, and it's our GWClass, so add
-	// our finalizer.
-	if err := controllers.AddFinalizer(ctx, r.Client, &route, controllers.FinalizerName); err != nil {
+	// Announce the Slices that the Route references. We do this first
+	// so the slices will be in place when the route is announced. The
+	// slices need the route to be able to allocate tunnel IDs.
+	if err := announceSlices(ctx, r.Client, l, account.Links["create-slice"], epic, config.NamespacedName().String(), &route); err != nil {
 		return controllers.Done, err
 	}
 
-	// Prepare the route to be sent to EPIC
-	announcedRoute := route.DeepCopy()
+	// See if we've already announced this Route
+	if link, announced := route.Annotations[epicgwv1.EPICLinkAnnotation]; announced {
 
-	// Munge the ParentRefs so they refer to the Gateways' UIDs, not
-	// their names. We use UIDs on the EPIC side because they're unique.
-	for i, parent := range announcedRoute.Spec.ParentRefs {
-		gw := gatewayapi.Gateway{}
-		if err := parentGW(ctx, r.Client, route.Namespace, parent, &gw); err != nil {
-			l.Info("Parent not found", "parentRef", parent)
-			missingParent = true
-		} else {
-			announcedRoute.Spec.ParentRefs[i].Name = gatewayapi.ObjectName(gateway.GatewayEPICUID(gw))
+		l.Info("Previously announced, will update", "link", link)
+
+		// Update the Route.
+		_, err := epic.UpdateRoute(link,
+			acnodal.RouteSpec{
+				ClientRef: acnodal.ClientRef{
+					Namespace: announcedRoute.Namespace,
+					Name:      announcedRoute.Name,
+					UID:       string(announcedRoute.UID),
+				},
+				HTTP: &announcedRoute.Spec,
+			})
+		if err != nil {
+			return controllers.Done, err
 		}
+
+	} else {
+		// Announce the route to EPIC.
+		routeResp, err := epic.AnnounceRoute(account.Links["create-route"],
+			acnodal.RouteSpec{
+				ClientRef: acnodal.ClientRef{
+					Namespace: announcedRoute.Namespace,
+					Name:      announcedRoute.Name,
+					UID:       string(announcedRoute.UID),
+				},
+				HTTP: &announcedRoute.Spec,
+			})
+		if err != nil {
+			return controllers.Done, err
+		}
+
+		// Annotate the Route to mark it as "announced".
+		if err := addEpicLink(ctx, r.Client, &route, routeResp.Links["self"], config.NamespacedName().String()); err != nil {
+			return controllers.Done, err
+		}
+
+		l.Info("Announced", "epic-link", route.Annotations[epicgwv1.EPICLinkAnnotation])
 	}
 
+	return controllers.Done, nil
+}
+
+func (r *HTTPRouteReconciler) addRuleConditions(l logr.Logger, ctx context.Context, update *status.RouteParentStatusUpdate, route gatewayapi.HTTPRoute, announcedRoute *gatewayapi.HTTPRoute) {
 	// Munge the ClientRefs so they refer to the services' UIDs, not
 	// their names. We use UIDs on the EPIC side because they're
 	// unique.
-	for i, rule := range announcedRoute.Spec.Rules {
+	for i, rule := range route.Spec.Rules {
+		l.Info("Processing rule", "rule", rule)
 		for j, ref := range rule.BackendRefs {
 			switch *ref.Kind {
 			case gatewayapi.Kind("Service"):
 				// Validate the backend ref
 				condition := dag.ValidateBackendRef(ref.BackendRef, route.Kind, route.Namespace, r)
 				if condition != nil {
-					conditions[gatewayapi.RouteConditionType(condition.Type)] = *condition
-					missingService = true
+					announcedRoute.Spec.Rules[i].BackendRefs[j].Name = "INVALID"
+					update.AddCondition(gatewayapi.RouteConditionType(condition.Type), condition.Status, gatewayapi.RouteConditionReason(condition.Reason), condition.Message)
 					break
 				}
 
@@ -196,142 +266,17 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				// which it refers.
 				svc := corev1.Service{}
 				if err := r.Get(ctx, namespacedNameOfHTTPBackendRef(ref.BackendRef, route.Namespace), &svc); err != nil {
-					conditions[gatewayapi.RouteConditionResolvedRefs] = metav1.Condition{
-						Type:    string(gatewayapi.RouteConditionResolvedRefs),
-						Reason:  string(gatewayapi.RouteReasonBackendNotFound),
-						Status:  metav1.ConditionFalse,
-						Message: fmt.Sprintf("Missing Service: %+v", ref.BackendRef),
-					}
-
-					l.Info("Backend not found", "backendRef", ref)
-					missingService = true
+					announcedRoute.Spec.Rules[i].BackendRefs[j].Name = "INVALID"
+					update.AddCondition(gatewayapi.RouteConditionResolvedRefs, metav1.ConditionFalse, gatewayapi.RouteReasonBackendNotFound, "Backend Ref Not Found")
 				} else {
 					announcedRoute.Spec.Rules[i].BackendRefs[j].Name = gatewayapi.ObjectName(svc.UID)
 				}
+
 			default:
-				conditions[gatewayapi.RouteConditionResolvedRefs] = metav1.Condition{
-					Type:    string(gatewayapi.RouteConditionResolvedRefs),
-					Reason:  string(gatewayapi.RouteReasonInvalidKind),
-					Status:  metav1.ConditionFalse,
-					Message: fmt.Sprintf("BackendRef %v has unsupported kind: %s", ref.Name, *ref.Kind),
-				}
-
-				l.Info("BackendRef has unsupported kind", "backendRef", ref)
-				missingService = true
+				update.AddCondition(gatewayapi.RouteConditionResolvedRefs, metav1.ConditionFalse, gatewayapi.RouteReasonInvalidKind, "Backend Ref invalid kind: "+string(*ref.Kind))
 			}
 		}
 	}
-
-	// See if we've already announced this Route
-	if link, announced := route.Annotations[epicgwv1.EPICLinkAnnotation]; announced {
-
-		// The route has been announced, so we might need to either update
-		// it or delete it. If we've got complete info about the things to
-		// which this route links, then we can update it. If anything is
-		// missing then we delete the route, back off, and retry.
-		if missingParent || missingService {
-
-			// Delete the EPIC resource.
-			l.Info("Previously announced, withdrawing", "link", link)
-			if err := maybeDelete(ctx, r.Client, &route); err != nil {
-				return controllers.Done, err
-			}
-
-			// Remove EPIC annotations so we re-announce when everything is
-			// in place.
-			if err := removeEpicLink(ctx, r.Client, &route); err != nil {
-				return controllers.Done, err
-			}
-
-			// Keep retrying until we've got everything that we need to
-			// announce.
-			return controllers.TryAgain, nil
-		} else {
-			l.Info("Previously announced, will update", "link", link)
-
-			// Announce the Slices that the Route references. We do this
-			// first so the slices will be in place when the route is
-			// announced. The slices need the route to be able to allocate
-			// tunnel IDs.
-			if err := announceSlices(ctx, r.Client, l, account.Links["create-slice"], epic, config.NamespacedName().String(), &route); err != nil {
-				return controllers.Done, err
-			}
-
-			// Update the Route.
-			_, err := epic.UpdateRoute(link,
-				acnodal.RouteSpec{
-					ClientRef: acnodal.ClientRef{
-						Namespace: announcedRoute.Namespace,
-						Name:      announcedRoute.Name,
-						UID:       string(announcedRoute.UID),
-					},
-					HTTP: &announcedRoute.Spec,
-				})
-			if err != nil {
-				return controllers.Done, err
-			}
-		}
-	} else {
-		if missingService {
-			conditions[gatewayapi.RouteConditionAccepted] = metav1.Condition{
-				Type:    string(gatewayapi.RouteConditionAccepted),
-				Reason:  string(gatewayapi.RouteReasonAccepted),
-				Status:  metav1.ConditionTrue,
-				Message: "Accepted",
-			}
-
-			if err := markRouteConditions(ctx, r.Client, l, client.ObjectKey{Namespace: route.GetNamespace(), Name: route.GetName()}, conditions); err != nil {
-				return controllers.Done, err
-			}
-		}
-
-		// If any info is missing then we can't announce so back off and
-		// retry later.
-		if missingParent || missingService {
-			l.Info("Missing info, will back off and retry")
-			return controllers.TryAgain, nil
-		} else {
-			// We have a complete Route so we can announce it and its slices
-			// to EPIC.
-
-			// Announce the Slices that the Route references. We do this
-			// first so the slices will be in place when the route is
-			// announced. The slices need the route to be able to allocate
-			// tunnel IDs.
-			if err := announceSlices(ctx, r.Client, l, account.Links["create-slice"], epic, config.NamespacedName().String(), &route); err != nil {
-				return controllers.Done, err
-			}
-
-			// Announce the route to EPIC.
-			routeResp, err := epic.AnnounceRoute(account.Links["create-route"],
-				acnodal.RouteSpec{
-					ClientRef: acnodal.ClientRef{
-						Namespace: announcedRoute.Namespace,
-						Name:      announcedRoute.Name,
-						UID:       string(announcedRoute.UID),
-					},
-					HTTP: &announcedRoute.Spec,
-				})
-			if err != nil {
-				return controllers.Done, err
-			}
-
-			// Annotate the Route to mark it as "announced".
-			if err := addEpicLink(ctx, r.Client, &route, routeResp.Links["self"], config.NamespacedName().String()); err != nil {
-				return controllers.Done, err
-			}
-
-			// Update the Route's status
-			err = markRouteAccepted(ctx, r.Client, l, client.ObjectKey{Namespace: route.GetNamespace(), Name: route.GetName()})
-			if err != nil {
-				return controllers.Done, err
-			}
-
-			l.Info("Announced", "epic-link", route.Annotations[epicgwv1.EPICLinkAnnotation])
-		}
-	}
-
-	return controllers.Done, nil
 }
 
 // Cleanup removes our finalizer from all of the HTTPRoutes in the
@@ -449,12 +394,28 @@ func announceSlices(ctx context.Context, cl client.Client, l logr.Logger, sliceU
 }
 
 // parentGW gets the parent Gateway resource pointed to by the
-// provided ParentRef. defaultNS is the namespace of the object that
-// contains the ref, which means that it's the default namespace if
-// the ref doesn't have one.
-func parentGW(ctx context.Context, cl client.Client, defaultNS string, ref gatewayapi.ParentReference, gw *gatewayapi.Gateway) error {
+// provided ParentRef, and returns it in *gw. defaultNS is the
+// namespace of the object that contains the ref, which means that
+// it's the default namespace if the ref doesn't have one.
+func parentGW(ctx context.Context, cl client.Client, defaultNS string, ref gatewayapi.ParentReference, gw *gatewayapi.Gateway) (*epicgwv1.GatewayClassConfig, error) {
+
+	// FIXME: fail if the parent is not a Gateway
+
 	gwName := namespacedNameOfParentRef(ref, defaultNS)
-	return cl.Get(ctx, gwName, gw)
+	if err := cl.Get(ctx, gwName, gw); err != nil {
+		return nil, err
+	}
+
+	// See if we're the chosen controller
+	if config, err := getEPICConfig(ctx, cl, string(gw.Spec.GatewayClassName)); err != nil {
+		return nil, err
+	} else {
+		if config == nil {
+			return nil, fmt.Errorf("Not our ControllerName, will ignore Gateway %v", gwName)
+		}
+
+		return config, nil
+	}
 }
 
 // routeSlices returns all of the slices that belong to all of
@@ -646,49 +607,8 @@ func maybeDelete(ctx context.Context, cl client.Client, route client.Object) err
 	return nil
 }
 
-// markRouteAccepted adds a Status Condition to indicate that the
-// route has been accepted by its parent.
-func markRouteAccepted(ctx context.Context, cl client.Client, l logr.Logger, routeKey client.ObjectKey) error {
-	conditions := map[gatewayapi.RouteConditionType]metav1.Condition{
-		gatewayapi.RouteConditionAccepted: {
-			Type:    string(gatewayapi.RouteConditionAccepted),
-			Reason:  string(gatewayapi.RouteReasonAccepted),
-			Status:  metav1.ConditionTrue,
-			Message: "Announced to EPIC",
-		},
-		gatewayapi.RouteConditionResolvedRefs: {
-			Type:    string(gatewayapi.RouteConditionResolvedRefs),
-			Reason:  string(gatewayapi.RouteReasonResolvedRefs),
-			Status:  metav1.ConditionTrue,
-			Message: "References resolved",
-		},
-	}
-	return markRouteConditions(ctx, cl, l, routeKey, conditions)
-}
-
-// markRouteRejected adds a Status Condition to indicate that the
-// route has been rejected by its parent.
-func markRouteRejected(ctx context.Context, cl client.Client, l logr.Logger, routeKey client.ObjectKey) error {
-	conditions := map[gatewayapi.RouteConditionType]metav1.Condition{
-		gatewayapi.RouteConditionAccepted: {
-			Type:    string(gatewayapi.RouteConditionAccepted),
-			Reason:  string(status.ReasonGatewayAllowMismatch),
-			Status:  metav1.ConditionFalse,
-			Message: "Reference not allowed by parent",
-		},
-		gatewayapi.RouteConditionResolvedRefs: {
-			Type:    string(gatewayapi.RouteConditionResolvedRefs),
-			Reason:  string(gatewayapi.RouteReasonResolvedRefs),
-			Status:  metav1.ConditionFalse,
-			Message: "References not allowed by parent",
-		},
-	}
-
-	return markRouteConditions(ctx, cl, l, routeKey, conditions)
-}
-
 // markRouteConditions adds a Status Condition to the route.
-func markRouteConditions(ctx context.Context, cl client.Client, l logr.Logger, routeKey client.ObjectKey, conditions map[gatewayapi.RouteConditionType]metav1.Condition) error {
+func markRouteConditions(ctx context.Context, cl client.Client, l logr.Logger, routeKey client.ObjectKey, rsu status.RouteStatusUpdate) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		// Fetch the resource here; you need to refetch it on every try,
 		// since if you got a conflict on the last update attempt then
@@ -699,28 +619,8 @@ func markRouteConditions(ctx context.Context, cl client.Client, l logr.Logger, r
 			return err
 		}
 
-		var route2 *gatewayapi.HTTPRoute
-		for _, gwRef := range route.Spec.ParentRefs {
-			// Use Contour code to add/update the Route's Status Condition to
-			// "Ready" with respect to this Gateway.
-			rcu := status.RouteConditionsUpdate{
-				FullName:           types.NamespacedName{Namespace: route.Namespace, Name: route.Name},
-				Conditions:         conditions,
-				ExistingConditions: nil,
-				GatewayRef:         namespacedNameOfParentRef(gwRef, routeKey.Namespace),
-				GatewayController:  controllers.GatewayController,
-				Generation:         route.Generation,
-				TransitionTime:     metav1.NewTime(time.Now()),
-			}
-
-			var ok bool
-			route2, ok = rcu.Mutate(&route).(*gatewayapi.HTTPRoute)
-			if !ok {
-				return fmt.Errorf("Failed to mutate Route")
-			}
-		}
-
 		// Try to update
+		route2 := rsu.Mutate(&route)
 		return cl.Status().Update(ctx, route2)
 	})
 }

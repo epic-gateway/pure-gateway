@@ -20,6 +20,7 @@ import (
 	"epic-gateway.org/puregw/controllers"
 	"epic-gateway.org/puregw/internal/contour/dag"
 	"epic-gateway.org/puregw/internal/contour/status"
+	"epic-gateway.org/puregw/internal/gateway"
 )
 
 var (
@@ -134,7 +135,7 @@ func markAcceptance(ctx context.Context, cl client.Client, l logr.Logger, gc *ga
 			return err
 		}
 
-		gc.Status.Conditions = status.MergeConditions(gc.Status.Conditions, status.RefreshCondition(&gc.ObjectMeta, accepted))
+		gc.Status.Conditions = status.MergeConditions(gc.Status.Conditions, *gateway.RefreshCondition(&gc.ObjectMeta, &accepted))
 
 		// Update the Conditions' ObservedGenerations
 		for i := range gc.Status.Conditions {

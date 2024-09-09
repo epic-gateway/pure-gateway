@@ -130,14 +130,27 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	gsu.AddCondition(gatewayapi.GatewayConditionProgrammed, metav1.ConditionTrue, gatewayapi.GatewayReasonProgrammed, "Programmed")
 	gsu.AddCondition(gatewayapi.GatewayConditionAccepted, metav1.ConditionTrue, gatewayapi.GatewayReasonAccepted, "Processing")
 
-	// Set the listener supportedKinds and update the attached routes count
-	children := []gatewayapi.HTTPRoute{}
-	if children, err = gatewayChildren(ctx, r.Client, l, &gw); err != nil {
-		return controllers.Done, err
-	}
 	for _, listener := range gw.Spec.Listeners {
+		children := []gatewayapi.HTTPRoute{}
+		if children, err = listenerChildren(ctx, r.Client, l, &gw, listener.Name); err != nil {
+			return controllers.Done, err
+		}
+
+		// Set the listener supportedKinds and update the attached routes count
 		setSupportedKinds(l, string(listener.Name), listener.AllowedRoutes.Kinds, &gsu)
 		setAttachedRoutes(l, string(listener.Name), children, &gsu)
+
+		// Nudge this Listener's HTTPRoutes. Here's the scenario: create a
+		// GW and some children. Everything works. Now delete the GW and
+		// re-load it. The new GW has a different UID so the EPIC GWRoutes
+		// won't link to the new GWGateway. We need to nudge the children
+		// so they send an update to EPIC that links to the new GWRoute.
+		l.Info("Nudging listener's children", "listener", listener.Name, "childCount", len(children))
+		for _, route := range children {
+			if err = gateway.Nudge(ctx, r.Client, l, &route); err != nil {
+				l.Error(err, "Nudging HTTPRoute", "gateway", gw, "route", route)
+			}
+		}
 	}
 
 	// Validate TLS configuration (if present)
@@ -215,18 +228,6 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	gsu.AddCondition(gatewayapi.GatewayConditionAccepted, metav1.ConditionTrue, gatewayapi.GatewayReasonAccepted, "Announced to EPIC")
 	if err := updateStatus(ctx, r.Client, l, &gw, &gsu); err != nil {
 		return controllers.Done, err
-	}
-
-	// Nudge this GW's HTTPRoutes. Here's the scenario: create a GW and
-	// some children. Everything works. Now delete the GW and re-load
-	// it. The new GW has a different UID so the EPIC GWRoutes won't
-	// link to the new GWGateway. We need to nudge the children so they
-	// send an update to EPIC that links to the new GWRoute.
-	l.Info("Nudging children", "childCount", len(children))
-	for _, route := range children {
-		if err = gateway.Nudge(ctx, r.Client, l, &route); err != nil {
-			l.Error(err, "Nudging HTTPRoute", "gateway", gw, "route", route)
-		}
 	}
 
 	return controllers.Done, nil
@@ -395,40 +396,9 @@ func markAddresses(ctx context.Context, cl client.Client, l logr.Logger, gw *gat
 	})
 }
 
-// freshenStatus updates the Status Condition ObservedGeneration.
-func freshenStatus(ctx context.Context, cl client.Client, l logr.Logger, key client.ObjectKey) error {
-	now := metav1.NewTime(time.Now())
-
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		// Fetch the resource here; you need to refetch it on every try,
-		// since if you got a conflict on the last update attempt then
-		// you need to get the current version before making your own
-		// changes.
-		gw := gatewayapi.Gateway{}
-		if err := cl.Get(ctx, key, &gw); err != nil {
-			return err
-		}
-
-		// Update the Conditions' ObservedGenerations
-		for i := range gw.Status.Conditions {
-			gw.Status.Conditions[i].ObservedGeneration = gw.ObjectMeta.Generation
-			gw.Status.Conditions[i].LastTransitionTime = now
-		}
-		for i, listener := range gw.Status.Listeners {
-			for j := range listener.Conditions {
-				gw.Status.Listeners[i].Conditions[j].ObservedGeneration = gw.ObjectMeta.Generation
-				gw.Status.Listeners[i].Conditions[j].LastTransitionTime = now
-			}
-		}
-
-		// Try to update
-		return cl.Status().Update(ctx, &gw)
-	})
-}
-
-// gatewayChildren finds the HTTPRoutes that refer to gw. It's a
+// listenerChildren finds the HTTPRoutes that refer to gw. It's a
 // brute-force approach but will likely work up to 1000's of routes.
-func gatewayChildren(ctx context.Context, cl client.Client, l logr.Logger, gw *gatewayapi.Gateway) (routes []gatewayapi.HTTPRoute, err error) {
+func listenerChildren(ctx context.Context, cl client.Client, l logr.Logger, gw *gatewayapi.Gateway, listenerName gatewayapi.SectionName) (routes []gatewayapi.HTTPRoute, err error) {
 	// FIXME: This will not scale, but that may be OK. I expect that
 	// most systems will have no more than a few dozen routes so
 	// iterating over all of them is probably OK.
@@ -441,20 +411,18 @@ func gatewayChildren(ctx context.Context, cl client.Client, l logr.Logger, gw *g
 	gwName := types.NamespacedName{Namespace: gw.Namespace, Name: gw.Name}
 	for _, route := range routeList.Items {
 		for _, ref := range route.Spec.ParentRefs {
-			if isRefToGateway(ref, gwName) {
+			if isRefToListener(ref, gwName, listenerName) {
 				routes = append(routes, route)
 			}
 		}
 	}
 
-	l.V(1).Info("Children", "count", len(routes))
-
 	return
 }
 
-// isRefToGateway returns whether or not ref is a reference
-// to a Gateway with the given namespace & name.
-func isRefToGateway(ref gatewayapi.ParentReference, gateway types.NamespacedName) bool {
+// isRefToListener returns whether or not ref is a reference to a
+// Gateway with the given namespace, name, and listener name.
+func isRefToListener(ref gatewayapi.ParentReference, gateway types.NamespacedName, listener gatewayapi.SectionName) bool {
 	// This is copied from internal/status/routeconditions.go which
 	// doesn't seem to handle "default" as a namespace.
 	if ref.Group != nil && *ref.Group != gatewayapi.GroupName {
@@ -473,6 +441,10 @@ func isRefToGateway(ref gatewayapi.ParentReference, gateway types.NamespacedName
 		if *ref.Namespace != gatewayapi.Namespace(gateway.Namespace) {
 			return false
 		}
+	}
+
+	if ref.SectionName != nil && *ref.SectionName != listener {
+		return false
 	}
 
 	return string(ref.Name) == gateway.Name

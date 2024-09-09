@@ -102,7 +102,7 @@ func (r *TCPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	var config *epicgwv1.GatewayClassConfig
 	for _, parent := range route.Spec.ParentRefs {
 		gw := gatewayapi.Gateway{}
-		if err := parentGW(ctx, r.Client, route.Namespace, parent, &gw); err != nil {
+		if _, err := parentGW(ctx, r.Client, route.Namespace, parent, &gw); err != nil {
 			l.Info("Can't get parent, will retry", "parentRef", parent)
 			return controllers.TryAgain, nil
 		}
@@ -121,9 +121,9 @@ func (r *TCPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		// Make sure that the Gateway will allow this Route to attach
 		if !gateway.GatewayAllowsTCPRoute(gw, route) {
 			// Update the Route's status
-			if err := markRouteRejected(ctx, r.Client, l, client.ObjectKey{Namespace: route.GetNamespace(), Name: route.GetName()}); err != nil {
-				return controllers.Done, err
-			}
+			// if err := markRouteRejected(ctx, r.Client, l, client.ObjectKey{Namespace: route.GetNamespace(), Name: route.GetName()}); err != nil {
+			// 	return controllers.Done, err
+			// }
 			return controllers.Done, nil
 		}
 	}
@@ -153,7 +153,7 @@ func (r *TCPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	// their names. We use UIDs on the EPIC side because they're unique.
 	for i, parent := range announcedRoute.Spec.ParentRefs {
 		gw := gatewayapi.Gateway{}
-		if err := parentGW(ctx, r.Client, route.Namespace, parent, &gw); err != nil {
+		if _, err := parentGW(ctx, r.Client, route.Namespace, parent, &gw); err != nil {
 			l.Info("Parent not found", "parentRef", parent)
 			missingParent = true
 		} else {
@@ -263,10 +263,10 @@ func (r *TCPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			}
 
 			// Update the Route's status
-			err = markRouteAccepted(ctx, r.Client, l, client.ObjectKey{Namespace: route.GetNamespace(), Name: route.GetName()})
-			if err != nil {
-				return controllers.Done, err
-			}
+			// err = markRouteAccepted(ctx, r.Client, l, client.ObjectKey{Namespace: route.GetNamespace(), Name: route.GetName()})
+			// if err != nil {
+			// 	return controllers.Done, err
+			// }
 
 			l.Info("Announced", "epic-link", route.Annotations[epicgwv1.EPICLinkAnnotation])
 		}

@@ -30,7 +30,7 @@ func GatewayEPICUID(gw gatewayapi.Gateway) string {
 // GatewayAllowsHTTPRoute determines whether or not gw allows
 // route. If Condition is nil then route is allowed, but if it's
 // non-nil then gw has rejected route.
-func GatewayAllowsHTTPRoute(gw gatewayapi.Gateway, route gatewayapi.HTTPRoute, fetcher dag.Fetcher) *meta_v1.Condition {
+func GatewayAllowsHTTPRoute(parent gatewayapi.ParentReference, gw gatewayapi.Gateway, route gatewayapi.HTTPRoute, fetcher dag.Fetcher) (result *meta_v1.Condition) {
 	if !GatewayAllowsKind(gw, (*gatewayapi.Kind)(&route.Kind)) {
 		return &meta_v1.Condition{
 			Type:    string(gatewayapi.RouteConditionAccepted),
@@ -50,18 +50,29 @@ func GatewayAllowsHTTPRoute(gw gatewayapi.Gateway, route gatewayapi.HTTPRoute, f
 	}
 
 	listenerAllows := false
+	result = &meta_v1.Condition{
+		Type:    string(gatewayapi.RouteConditionAccepted),
+		Reason:  string(gatewayapi.RouteReasonNotAllowedByListeners),
+		Status:  meta_v1.ConditionFalse,
+		Message: "Reference Listener not allowed by parent",
+	}
 	for _, listener := range gw.Spec.Listeners {
 		if dag.NamespaceMatches(gw.Namespace, listener.AllowedRoutes.Namespaces, labels.Everything(), route.Namespace, fetcher) {
-			listenerAllows = true
+			// If there's a sectionName and it doesn't match.
+			if parent.SectionName != nil && *parent.SectionName != listener.Name {
+				result = &meta_v1.Condition{
+					Type:    string(gatewayapi.RouteConditionAccepted),
+					Reason:  string(gatewayapi.RouteReasonNoMatchingParent),
+					Status:  meta_v1.ConditionFalse,
+					Message: "Reference Listener not allowed by parent",
+				}
+			} else {
+				listenerAllows = true
+			}
 		}
 	}
 	if !listenerAllows {
-		return &meta_v1.Condition{
-			Type:    string(gatewayapi.RouteConditionAccepted),
-			Reason:  string(gatewayapi.RouteReasonNotAllowedByListeners),
-			Status:  meta_v1.ConditionFalse,
-			Message: "Reference Listener not allowed by parent",
-		}
+		return result
 	}
 
 	return nil
