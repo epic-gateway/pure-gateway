@@ -160,54 +160,22 @@ func (r *RouteStatusUpdate) Mutate(obj client.Object) client.Object {
 	switch o := obj.(type) {
 	case *gatewayapi_v1.HTTPRoute:
 		route := o.DeepCopy()
-
-		// Get all the RouteParentStatuses that are for other Gateways.
-		for _, rps := range o.Status.Parents {
-			if !gatewayapi.IsRefToGateway(rps.ParentRef, r.GatewayRef) {
-				newRouteParentStatuses = append(newRouteParentStatuses, rps)
-			}
-		}
-
 		route.Status.Parents = newRouteParentStatuses
 
 		return route
 	case *gatewayapi_v1alpha2.TLSRoute:
 		route := o.DeepCopy()
-
-		// Get all the RouteParentStatuses that are for other Gateways.
-		for _, rps := range o.Status.Parents {
-			if !gatewayapi.IsRefToGateway(rps.ParentRef, r.GatewayRef) {
-				newRouteParentStatuses = append(newRouteParentStatuses, rps)
-			}
-		}
-
 		route.Status.Parents = newRouteParentStatuses
 
 		return route
 	case *gatewayapi_v1alpha2.GRPCRoute:
 		route := o.DeepCopy()
-
-		// Get all the RouteParentStatuses that are for other Gateways.
-		for _, rps := range o.Status.Parents {
-			if !gatewayapi.IsRefToGateway(rps.ParentRef, r.GatewayRef) {
-				newRouteParentStatuses = append(newRouteParentStatuses, rps)
-			}
-		}
-
 		route.Status.Parents = newRouteParentStatuses
 
 		return route
 
 	case *gatewayapi_v1alpha2.TCPRoute:
 		route := o.DeepCopy()
-
-		// Get all the RouteParentStatuses that are for other Gateways.
-		for _, rps := range o.Status.Parents {
-			if !gatewayapi.IsRefToGateway(rps.ParentRef, r.GatewayRef) {
-				newRouteParentStatuses = append(newRouteParentStatuses, rps)
-			}
-		}
-
 		route.Status.Parents = newRouteParentStatuses
 
 		return route
