@@ -15,6 +15,7 @@ package status
 
 import (
 	"fmt"
+	"reflect"
 	"time"
 
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -77,7 +78,7 @@ func (r *RouteParentStatusUpdate) AddCondition(conditionType gatewayapi_v1.Route
 	var rps *gatewayapi_v1.RouteParentStatus
 
 	for _, v := range r.RouteParentStatuses {
-		if v.ParentRef == r.parentRef {
+		if reflect.DeepEqual(v.ParentRef, r.parentRef) {
 			rps = v
 			break
 		}
